@@ -1,6 +1,4 @@
-﻿using System;
-
-public enum CellState
+﻿public enum CellState
 {
     Unknown = 0,
     Miss = 1,

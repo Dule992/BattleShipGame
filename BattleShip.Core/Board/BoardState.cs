@@ -1,6 +1,4 @@
-﻿using System;
-
-public class BoardState
+﻿public class BoardState
 {
     public int Size { get; }
     private readonly CellState[,] _cells;

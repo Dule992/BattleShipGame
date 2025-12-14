@@ -1,6 +1,4 @@
-﻿using System;
-
-public readonly struct Coordinate
+﻿public readonly struct Coordinate
 {
     public int Row { get; }
     public int Col { get; }

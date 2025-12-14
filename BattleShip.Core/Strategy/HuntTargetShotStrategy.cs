@@ -11,7 +11,7 @@
             _board = board;
         }
 
-        public Coordinate GetNextShot(BoardState _)
+        public Coordinate GetNextShot(BoardState nextShoot)
         {
             // If we have target cells queued, use them first.
             if (_targetQueue.Count > 0)
@@ -19,7 +19,7 @@
                 var next = _targetQueue.Dequeue();
                 if (_board[next] == CellState.Unknown)
                     return next;
-                return GetNextShot(_);
+                return GetNextShot(nextShoot);
             }
 
             // HUNT MODE: parity-based search.

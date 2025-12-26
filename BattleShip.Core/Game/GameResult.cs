@@ -1,6 +1,4 @@
-﻿using System;
-
-public enum GameResult
+﻿public enum GameResult
 {
     Victory,
     Defeat,

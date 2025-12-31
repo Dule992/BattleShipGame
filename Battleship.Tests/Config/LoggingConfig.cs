@@ -8,8 +8,8 @@ namespace BattleShipGame.Battleship.Tests.Config
 {
     public class LoggingConfig
     {
-        public string MinimumLevel { get; set; }
-        public string LogDirectory { get; set; }
-        public string FileName { get; set; }
+        public static string MinimumLevel { get; set; }
+        public static string LogDirectory { get; set; }
+        public static string FileName { get; set; }
     }
 }

@@ -33,72 +33,163 @@ namespace BattleShipGame.Pages
 
         public async Task ClickPlayAsync()
         {
-            await _page.GetByText("Play").ClickAsync();
+            await _page.Locator(".battlefield-start-button").ClickAsync();
         }
 
-        public async Task WaitForOpponentAsync(TimeSpan timeout)
+        public async Task<bool> WaitForTheGameStartedMessageAsync()
         {
-            // Suppose there’s a status label saying "Waiting for opponent" -> "Your turn"
-            await _page.Locator(".notification__game-started-move-on") // adjust selector
-                .Filter(new LocatorFilterOptions { HasTextRegex = new System.Text.RegularExpressions.Regex("The game started, your turn.    ", System.Text.RegularExpressions.RegexOptions.IgnoreCase) })
-                .WaitForAsync(new LocatorWaitForOptions { Timeout = (float)timeout.TotalMilliseconds });
+            var statusGameStartedOn = await _page.Locator("notification__game-started-move-on").InnerTextAsync();
+            var statusGameStartedOff = await _page.Locator("notification__game-started-move-off").InnerTextAsync();
+            return statusGameStartedOn.Contains("The game started, your turn.", StringComparison.OrdinalIgnoreCase) 
+                || statusGameStartedOff.Contains("The game began, opponent's turn.", StringComparison.OrdinalIgnoreCase);
+        }
+
+        public async Task<bool> WaitForOpponentAsync()
+        {
+            var statusWaitingOn = await _page.Locator(".notification__waiting-for-rival").InnerTextAsync();
+            return statusWaitingOn.Contains("Waiting for opponent.", StringComparison.OrdinalIgnoreCase);
         }
 
         public async Task<bool> IsMyTurnAsync()
         {
-            // You need a reliable UI indicator: e.g. "Your move" in some status text
-            var status = await _page.Locator("#status-text-or-similar").InnerTextAsync();
-            return status.Contains("Your", StringComparison.OrdinalIgnoreCase)
-                   && status.Contains("turn", StringComparison.OrdinalIgnoreCase);
+            var statusMoveOn = await _page.Locator(".notification__move-on").InnerTextAsync();
+            return statusMoveOn.Contains("Your turn.", StringComparison.OrdinalIgnoreCase);
         }
 
         public async Task FireAtAsync(Coordinate coord)
         {
             // Map board coordinate to cell selector (e.g. data-row/col attributes)
-            var table = _page.Locator(".battlefield__rival");
-            var cell = table.Locator($"td[data-y='{coord.Row}'][data-x='{coord.Col}']");
+            var cell = _page.Locator($".battlefield__rival .battlefield-table .battlefield-cell-content[data-y='{coord.Row}'][data-x='{coord.Col}']");
             await cell.ClickAsync();
         }
 
         public async Task<CellState> ReadLastShotResultAsync(Coordinate coord)
         {
             // Could be reading CSS classes on last clicked cell (hit/miss), or reading text
-            // Example:
-            var table = _page.Locator(".battlefield__rival");
-            var cell = table.Locator($"td[data-y='{coord.Row}'][data-x='{coord.Col}']");
-            var classAttribute = await cell.GetAttributeAsync("class");
+            var isCellHit = await _page.Locator($".battlefield__rival .battlefield-table .battlefield-cell__hit .battlefield-cell-content[data-y='{coord.Row}'][data-x='{coord.Col}']").IsVisibleAsync();
+            var isCellSunk = await _page.Locator($".battlefield__rival .battlefield-table .battlefield-cell__done .battlefield-cell-content[data-y='{coord.Row}'][data-x='{coord.Col}']").IsVisibleAsync();
 
-            if (classAttribute?.Contains("hit") == true)
+            if (isCellHit == true)
                 return CellState.Hit;
-            if (classAttribute?.Contains("sunk") == true)
+            if (isCellSunk == true)
                 return CellState.Sunk;
 
             return CellState.Miss;
         }
 
+        // PSEUDOCODE / PLAN:
+        // 1. Locate all elements matching ".notification-message".
+        // 2. Try to fetch all inner texts in one call using Locator.AllInnerTextsAsync().
+        // 3. If that fails, fallback to iterating elements using CountAsync() and Nth(i).InnerTextAsync().
+        // 4. If no texts found, return GameResult.Unknown.
+        // 5. Define checks in order of specificity to map found text to a GameResult:
+        //    - "you won" or "won" => Victory
+        //    - "you lose" or "lose" => Defeat
+        //    - "opponent has left" or "left" => OpponentLeft
+        //    - "connection lost" or "connection" => ConnectionLost
+        //    - "timeout" or "timed out" => Timeout
+        // 6. For each non-empty text, perform case-insensitive substring checks and return the matching GameResult immediately.
+        // 7. If none match, return GameResult.Unknown.
+
         public async Task<GameResult> ReadGameResultAsync()
         {
-            var status = await _page.Locator(".notification-message").InnerTextAsync();
+            var locator = _page.Locator(".notification-message");
 
-            if (status.Contains("you won", StringComparison.OrdinalIgnoreCase))
-                return GameResult.Victory;
-            if (status.Contains("You lose", StringComparison.OrdinalIgnoreCase))
-                return GameResult.Defeat;
-            if (status.Contains("opponent left", StringComparison.OrdinalIgnoreCase))
-                return GameResult.OpponentLeft;
-            if (status.Contains("connection lost", StringComparison.OrdinalIgnoreCase))
-                return GameResult.ConnectionLost;
+            string[] texts;
+            try
+            {
+                texts = (string[])await locator.AllInnerTextsAsync();
+            }
+            catch
+            {
+                var count = await locator.CountAsync();
+                var arr = new string[count];
+                for (int i = 0; i < count; i++)
+                {
+                    arr[i] = await locator.Nth(i).InnerTextAsync() ?? string.Empty;
+                }
+                texts = arr;
+            }
+
+            if (texts == null || texts.Length == 0)
+                return GameResult.Unknown;
+
+            foreach (var text in texts)
+            {
+                if (string.IsNullOrWhiteSpace(text))
+                    continue;
+
+                if (text.IndexOf("you won", StringComparison.OrdinalIgnoreCase) >= 0
+                    || text.IndexOf("won", StringComparison.OrdinalIgnoreCase) >= 0)
+                    return GameResult.Victory;
+
+                if (text.IndexOf("you lose", StringComparison.OrdinalIgnoreCase) >= 0
+                    || text.IndexOf("lose", StringComparison.OrdinalIgnoreCase) >= 0)
+                    return GameResult.Defeat;
+
+                if (text.IndexOf("opponent has left", StringComparison.OrdinalIgnoreCase) >= 0
+                    || text.IndexOf("left", StringComparison.OrdinalIgnoreCase) >= 0)
+                    return GameResult.OpponentLeft;
+
+                if (text.IndexOf("connection lost", StringComparison.OrdinalIgnoreCase) >= 0
+                    || text.IndexOf("connection", StringComparison.OrdinalIgnoreCase) >= 0)
+                    return GameResult.ConnectionLost;
+
+                if (text.IndexOf("timeout", StringComparison.OrdinalIgnoreCase) >= 0
+                    || text.IndexOf("timed out", StringComparison.OrdinalIgnoreCase) >= 0)
+                    return GameResult.Timeout;
+            }
 
             return GameResult.Unknown;
         }
 
         public async Task<bool> IsGameOverAsync()
         {
-            var status = await _page.Locator(".notification-message").InnerTextAsync();
-            return status.IndexOf("won", StringComparison.OrdinalIgnoreCase) >= 0
-                || status.IndexOf("lose", StringComparison.OrdinalIgnoreCase) >= 0
-                || status.IndexOf("left", StringComparison.OrdinalIgnoreCase) >= 0
-                || status.IndexOf("connection", StringComparison.OrdinalIgnoreCase) >= 0;
+            // PSEUDOCODE / PLAN:
+            // 1. Locate all elements matching ".notification-message".
+            // 2. Try to fetch all inner texts in one call using Locator.AllInnerTextsAsync().
+            // 3. If that fails, fallback to iterating elements using CountAsync() and Nth(i).InnerTextAsync().
+            // 4. If no texts found, return false.
+            // 5. Define keywords that indicate the game is over (e.g. "won", "lose", "left", "connection", "timeout").
+            // 6. For each non-empty text, perform case-insensitive substring checks against the keywords.
+            // 7. If any text contains any keyword, return true; otherwise return false.
+
+            var locator = _page.Locator(".notification-submit.restart");
+
+            string[] texts;
+            try
+            {
+                texts = (string[])await locator.AllInnerTextsAsync();
+            }
+            catch
+            {
+                var count = await locator.CountAsync();
+                var arr = new string[count];
+                for (int i = 0; i < count; i++)
+                {
+                    arr[i] = await locator.Nth(i).InnerTextAsync() ?? string.Empty;
+                }
+                texts = arr;
+            }
+
+            if (texts == null || texts.Length == 0)
+                return false;
+
+            string[] keywords = new[] { "won", "you won", "lose", "you lose", "left", "connection", "timeout" };
+
+            foreach (var text in texts)
+            {
+                if (string.IsNullOrEmpty(text))
+                    continue;
+
+                foreach (var kw in keywords)
+                {
+                    if (text.IndexOf(kw, StringComparison.OrdinalIgnoreCase) >= 0)
+                        return true;
+                }
+            }
+
+            return false;
         }
     }
 }

@@ -2,6 +2,6 @@
 {
     public class AllureConfig
     {
-        public string ResultsDirectory { get; set; }
+        public static string ResultsDirectory { get; set; }
     }
 }

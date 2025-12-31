@@ -13,11 +13,9 @@ namespace BattleShipGame.Battleship.Tests.Logging
 
         static TestLogging()
         {
-            var cfg = TestConfiguration.Logging;
+            Directory.CreateDirectory(LoggingConfig.LogDirectory);
 
-            Directory.CreateDirectory(cfg.LogDirectory);
-
-            var level = cfg.MinimumLevel?.ToLowerInvariant() switch
+            var level = LoggingConfig.MinimumLevel?.ToLowerInvariant() switch
             {
                 "debug" => LogEventLevel.Debug,
                 "verbose" => LogEventLevel.Verbose,
@@ -32,7 +30,7 @@ namespace BattleShipGame.Battleship.Tests.Logging
                 .Enrich.FromLogContext()
                 .WriteTo.Console()
                 .WriteTo.File(
-                    path: Path.Combine(cfg.LogDirectory, cfg.FileName),
+                    path: Path.Combine(LoggingConfig.LogDirectory, LoggingConfig.FileName),
                     rollingInterval: RollingInterval.Day,
                     retainedFileCountLimit: 7)
                 .CreateLogger();

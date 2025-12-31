@@ -55,3 +55,7 @@ nunit-*.xml
 
 # VS
 .vs
+
+# Allure outputs
+allure-results/
+allure-report/

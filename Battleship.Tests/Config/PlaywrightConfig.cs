@@ -2,7 +2,10 @@
 {
     public class PlaywrightConfig
     {
-        public bool Headless { get; set; }
-        public int SlowMoMilliseconds { get; set; }
+        public static string Browser {  get; set; }
+        public static string Device { get; set; }
+        public static bool Headless { get; set; }
+        public static int SlowMoMilliseconds { get; set; }
+        public static int DefaultTimeoutMilliseconds { get; set; }
     }
 }

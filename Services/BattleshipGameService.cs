@@ -45,8 +45,17 @@ namespace Battleship.UI.Services
             _logger.LogInformation("Clicking Play.");
             await _page.ClickPlayAsync();
 
-            _logger.LogInformation("Waiting for opponent to connect");
+            if(await _page.WaitForOpponentAsync())
+                _logger.LogInformation("Opponent is ready.");
 
+            //bool isGameOver = await _page.IsGameOverAsync();
+
+            //bool isMyTurn = await _page.IsMyTurnAsync();
+
+            //var gameResult1 = await _page.ReadGameResultAsync();
+
+
+             
             while (!await _page.IsGameOverAsync())
             {
                 if ((DateTime.UtcNow - start) > overallTimeout)
@@ -73,11 +82,11 @@ namespace Battleship.UI.Services
 
                     if (result == CellState.Hit)
                     {
-                        _logger.LogDebug("Hit at {Coordinate}.", nextShot);
+                        _logger.LogInformation("Hit at {Coordinate}.", nextShot);
                     }
                     else if (result == CellState.Sunk)
                     {
-                        _logger.LogDebug("Ship sunk at/around {Coordinate}.", nextShot);
+                        _logger.LogInformation("Ship sunk at/around {Coordinate}.", nextShot);
                         _moveLog.Add($"STATE: Ship sunk at cluster around {nextShot}");
                     }
                 }
@@ -96,15 +105,17 @@ namespace Battleship.UI.Services
             }
             else
             {
-                _logger.LogWarning("Game ended without victory. Result={Result}, Reason={Reason}",
+                _logger.LogInformation("Game ended without victory. Result={Result}, Reason={Reason}",
                     gameResult, failureReason);
 
                 if (gameResult == GameResult.OpponentLeft)
                 {
+                    _logger.LogInformation("Opponent left the game.");
                     _moveLog.Add("STATE: Opponent left the game.");
                 }
                 else if (gameResult == GameResult.ConnectionLost)
                 {
+                    _logger.LogInformation("Connection lost during the game.");)
                     _moveLog.Add("STATE: Connection lost.");
                 }
             }

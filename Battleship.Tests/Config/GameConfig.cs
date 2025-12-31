@@ -2,8 +2,8 @@
 {
     public class GameConfig
     {
-        public string BaseUrl { get; set; }
-        public int OpponentConnectTimeoutSeconds { get; set; }
-        public double OverallGameTimeoutMinutes { get; set; }
+        public static string BaseUrl { get; set; }
+        public static int OpponentConnectTimeoutSeconds { get; set; }
+        public static double OverallGameTimeoutMinutes { get; set; }
     }
 }

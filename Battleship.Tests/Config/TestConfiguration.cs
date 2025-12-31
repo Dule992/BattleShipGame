@@ -5,27 +5,30 @@ namespace BattleShipGame.Battleship.Tests.Config
     public static class TestConfiguration
     {
         public static IConfigurationRoot RawConfiguration { get; }
-        public static GameConfig Game { get; }
-        public static PlaywrightConfig Playwright { get; }
-        public static LoggingConfig Logging { get; }
-        public static AllureConfig Allure { get; }
 
         static TestConfiguration()
         {
             var builder = new ConfigurationBuilder()
                 .SetBasePath(AppContext.BaseDirectory)
-                .AddJsonFile("Config/appsettings.json", optional: false, reloadOnChange: false);
+                .AddJsonFile(Path.Combine("Battleship.Tests\\Config", "appsettings.json"), optional: false, reloadOnChange: false);
             
             RawConfiguration = builder.Build();
 
-            GameConfig? gameConfig = RawConfiguration.GetSection("Game") as GameConfig;
-            Game = gameConfig;
-            PlaywrightConfig? playwright = RawConfiguration.GetSection("Playwright") as PlaywrightConfig;
-            Playwright = playwright;
-            LoggingConfig? logging = RawConfiguration.GetSection("Logging") as LoggingConfig;
-            Logging = logging;
-            AllureConfig? allure = RawConfiguration.GetSection("Allure") as AllureConfig;
-            Allure = allure;
+            GameConfig.BaseUrl = RawConfiguration["Game:BaseUrl"];
+            GameConfig.OpponentConnectTimeoutSeconds = int.Parse(RawConfiguration["Game:OpponentConnectTimeoutSeconds"]);
+            GameConfig.OverallGameTimeoutMinutes = double.Parse(RawConfiguration["Game:OverallGameTimeoutMinutes"]);
+
+            PlaywrightConfig.Browser = RawConfiguration["Playwright:Browser"];
+            PlaywrightConfig.Device = RawConfiguration["Playwright:Device"];
+            PlaywrightConfig.Headless = bool.Parse(RawConfiguration["Playwright:Headless"]);
+            PlaywrightConfig.SlowMoMilliseconds = int.Parse(RawConfiguration["Playwright:SlowMoMilliseconds"]);
+            PlaywrightConfig.DefaultTimeoutMilliseconds = int.Parse(RawConfiguration["Playwright:DefaultTimeoutMilliseconds"]);
+
+            LoggingConfig.MinimumLevel = RawConfiguration["Logging:MinimumLevel"];
+            LoggingConfig.LogDirectory = RawConfiguration["Logging:LogDirectory"];
+            LoggingConfig.FileName = RawConfiguration["Logging:FileName"];
+
+            AllureConfig.ResultsDirectory = RawConfiguration["Allure:ResultsDirectory"];
         }
     }
 }

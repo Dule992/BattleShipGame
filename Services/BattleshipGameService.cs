@@ -1,4 +1,4 @@
-﻿using BattleShipGame.BattleShip.Core.Strategy;
+using BattleShipGame.BattleShip.Core.Strategy;
 using BattleShipGame.Pages;
 using Microsoft.Extensions.Logging;
 namespace Battleship.UI.Services
@@ -29,10 +29,48 @@ namespace Battleship.UI.Services
             TimeSpan overallTimeout,
             TimeSpan opponentConnectTimeout)
         {
-            var start = DateTime.UtcNow;
+            var startTime = DateTime.UtcNow;
 
             _logger.LogInformation("Starting Battleship game. BaseUrl={BaseUrl}", baseUrl);
+            await InitializeGameAsync(baseUrl);
 
+            // Main game loop
+            while (!await _page.IsGameOverAsync())
+            {
+                if (IsTimeoutExceeded(startTime, overallTimeout, out var timeoutResult))
+                {
+                    return timeoutResult;
+                }
+
+                // Check if restart button is visible (game ended) before executing turn
+                if (await _page.IsRestartButtonVisibleAsync())
+                {
+                    _logger.LogInformation("Restart button detected - game has ended");
+                    return await HandleGameCompletionAsync();
+                }
+
+                if (await _page.IsMyTurnAsync())
+                {
+                    var turnResult = await ExecuteTurnSafelyAsync();
+                    if (turnResult.HasValue)
+                    {
+                        return turnResult.Value;
+                    }
+                }
+                else
+                {
+                    await WaitForOpponentTurnAsync();
+                }
+            }
+
+            return await HandleGameCompletionAsync();
+        }
+
+        /// <summary>
+        /// Initializes the game: navigates, selects opponent, randomizes ships, and starts the game.
+        /// </summary>
+        private async Task InitializeGameAsync(string baseUrl)
+        {
             await _page.NavigateAsync(baseUrl);
             _logger.LogInformation("Page loaded. Choosing random opponent.");
 
@@ -45,82 +83,235 @@ namespace Battleship.UI.Services
             _logger.LogInformation("Clicking Play.");
             await _page.ClickPlayAsync();
 
-            if(await _page.WaitForOpponentAsync())
-                _logger.LogInformation("Opponent is ready.");
-
-            //bool isGameOver = await _page.IsGameOverAsync();
-
-            //bool isMyTurn = await _page.IsMyTurnAsync();
-
-            //var gameResult1 = await _page.ReadGameResultAsync();
-
-
-             
-            while (!await _page.IsGameOverAsync())
+            if (await _page.WaitForOpponentAsync())
             {
-                if ((DateTime.UtcNow - start) > overallTimeout)
-                {
-                    _logger.LogWarning("Game timed out after {Minutes} minutes.",
-                        overallTimeout);
+                _logger.LogInformation("Opponent is ready.");
+            }
+        }
 
-                    return (GameResult.Timeout, FailureReason.Timeout);
-                }
-
-                if (await _page.IsMyTurnAsync())
-                {
-                    var nextShot = _strategy.GetNextShot(_board);
-                    _logger.LogInformation("Firing at {Coordinate}.", nextShot);
-                    _moveLog.Add($"SHOT: {nextShot}");
-
-                    await _page.FireAtAsync(nextShot);
-                    var result = await _page.ReadLastShotResultAsync(nextShot);
-
-                    _logger.LogInformation("Result at {Coordinate}: {Result}", nextShot, result);
-                    _moveLog.Add($"RESULT: {nextShot} => {result}");
-
-                    _strategy.RegisterShotResult(nextShot, result);
-
-                    if (result == CellState.Hit)
-                    {
-                        _logger.LogInformation("Hit at {Coordinate}.", nextShot);
-                    }
-                    else if (result == CellState.Sunk)
-                    {
-                        _logger.LogInformation("Ship sunk at/around {Coordinate}.", nextShot);
-                        _moveLog.Add($"STATE: Ship sunk at cluster around {nextShot}");
-                    }
-                }
-                else
-                {
-                    await Task.Delay(500);
-                }
+        /// <summary>
+        /// Checks if the overall timeout has been exceeded and returns timeout result if so.
+        /// </summary>
+        private bool IsTimeoutExceeded(
+            DateTime startTime,
+            TimeSpan overallTimeout,
+            out (GameResult Result, FailureReason FailureReason) result)
+        {
+            if ((DateTime.UtcNow - startTime) > overallTimeout)
+            {
+                _logger.LogWarning("Game timed out after {Minutes} minutes.", overallTimeout.TotalMinutes);
+                _moveLog.Add($"STATE: Game timed out after {overallTimeout.TotalMinutes} minutes");
+                result = (GameResult.Timeout, FailureReason.Timeout);
+                return true;
             }
 
+            result = default;
+            return false;
+        }
+
+        /// <summary>
+        /// Executes a turn with error handling. Returns game result if game ended during execution.
+        /// </summary>
+        private async Task<(GameResult Result, FailureReason FailureReason)?> ExecuteTurnSafelyAsync()
+        {
+            try
+            {
+                await ExecuteTurnAsync();
+                return null; // Game continues
+            }
+            catch (System.TimeoutException ex)
+            {
+                // Handle timeout exception - game likely ended during turn execution
+                _logger.LogWarning(ex, "Game ended during turn execution");
+                return await GetFinalGameResultAsync();
+            }
+        }
+
+        /// <summary>
+        /// Reads and returns the final game result.
+        /// </summary>
+        private async Task<(GameResult Result, FailureReason FailureReason)> GetFinalGameResultAsync()
+        {
             var gameResult = await _page.ReadGameResultAsync();
             var failureReason = MapFailureReason(gameResult);
+            return (gameResult, failureReason);
+        }
+
+
+        /// <summary>
+        /// Handles game completion: reads result, logs outcome, and returns final result.
+        /// </summary>
+        private async Task<(GameResult Result, FailureReason FailureReason)> HandleGameCompletionAsync()
+        {
+            var (gameResult, failureReason) = await GetFinalGameResultAsync();
 
             if (gameResult == GameResult.Victory)
             {
-                _logger.LogInformation("Game ended in VICTORY.");
+                _logger.LogInformation("✓✓✓ Game ended in VICTORY! ✓✓✓");
+                _moveLog.Add("STATE: VICTORY - Game won!");
             }
             else
             {
-                _logger.LogInformation("Game ended without victory. Result={Result}, Reason={Reason}",
-                    gameResult, failureReason);
-
-                if (gameResult == GameResult.OpponentLeft)
-                {
-                    _logger.LogInformation("Opponent left the game.");
-                    _moveLog.Add("STATE: Opponent left the game.");
-                }
-                else if (gameResult == GameResult.ConnectionLost)
-                {
-                    _logger.LogInformation("Connection lost during the game.");)
-                    _moveLog.Add("STATE: Connection lost.");
-                }
+                _logger.LogWarning("✗✗✗ Game ended without victory ✗✗✗");
+                LogGameEndWithoutVictory(gameResult, failureReason);
             }
 
             return (gameResult, failureReason);
+        }
+
+        /// <summary>
+        /// Logs game end scenarios that are not victories.
+        /// </summary>
+        private void LogGameEndWithoutVictory(GameResult gameResult, FailureReason failureReason)
+        {
+            _logger.LogInformation("Game ended without victory. Result={Result}, Reason={Reason}",
+                gameResult, failureReason);
+
+            switch (gameResult)
+            {
+                case GameResult.OpponentLeft:
+                    _logger.LogInformation("Opponent left the game.");
+                    _moveLog.Add("STATE: Opponent left the game.");
+                    break;
+
+                case GameResult.ConnectionLost:
+                    _logger.LogInformation("Connection lost during the game.");
+                    _moveLog.Add("STATE: Connection lost.");
+                    break;
+            }
+        }
+
+        /// <summary>
+        /// Executes a single turn: selects shot, fires, reads result, and updates strategy.
+        /// </summary>
+        private async Task ExecuteTurnAsync()
+        {
+            var nextShot = _strategy.GetNextShot(_board);
+            _logger.LogInformation("Firing at {Coordinate}", nextShot);
+            _moveLog.Add($"SHOT: {nextShot}");
+
+            await _page.FireAtAsync(nextShot);
+
+            // Wait a moment for UI to update after firing
+            await Task.Delay(300);
+
+            // Read the result with retry logic to ensure UI has updated
+            var result = await ReadShotResultWithRetryAsync(nextShot, maxRetries: 5);
+
+            // Log and record the result
+            LogShotResult(nextShot, result);
+            _moveLog.Add($"RESULT: {nextShot} => {result}");
+
+            // Update strategy with the result (strategy updates board state internally)
+            _strategy.RegisterShotResult(nextShot, result);
+        }
+
+        /// <summary>
+        /// Reads shot result with retry logic to handle UI update delays.
+        /// </summary>
+        private async Task<CellState> ReadShotResultWithRetryAsync(Coordinate coord, int maxRetries = 5)
+        {
+            for (int attempt = 1; attempt <= maxRetries; attempt++)
+            {
+                var result = await _page.ReadLastShotResultAsync(coord);
+
+                // If we get a non-Miss result, return it immediately
+                if (result != CellState.Miss)
+                {
+                    return result;
+                }
+
+                // If it's still showing as Miss, wait a bit longer and retry
+                if (attempt < maxRetries)
+                {
+                    await Task.Delay(200 * attempt); // Exponential backoff
+                }
+            }
+
+            // After all retries, return what we got (likely Miss)
+            return await _page.ReadLastShotResultAsync(coord);
+        }
+
+        /// <summary>
+        /// Logs the shot result with appropriate detail level based on result type.
+        /// </summary>
+        private void LogShotResult(Coordinate coord, CellState result)
+        {
+            switch (result)
+            {
+                case CellState.Hit:
+                    _logger.LogInformation("✓ HIT at {Coordinate} - Ship damaged!", coord);
+                    _moveLog.Add($"STATE: Hit detected at {coord}");
+                    break;
+
+                case CellState.Sunk:
+                    _logger.LogInformation("✓✓ SUNK at {Coordinate} - Ship destroyed!", coord);
+                    _moveLog.Add($"STATE: Ship SUNK at {coord}");
+                    break;
+
+                case CellState.Miss:
+                    _logger.LogDebug("✗ Miss at {Coordinate}", coord);
+                    break;
+
+                default:
+                    _logger.LogWarning("? Unknown result at {Coordinate}: {Result}", coord, result);
+                    break;
+            }
+        }
+
+        /// <summary>
+        /// Waits for opponent's turn to complete by polling IsMyTurnAsync.
+        /// </summary>
+        private async Task WaitForOpponentTurnAsync()
+        {
+            const int maxWaitTime = 30000; // 30 seconds max wait
+            const int pollInterval = 500;
+            var waited = 0;
+
+            while (waited < maxWaitTime)
+            {
+                try
+                {
+                    // Check if game ended during opponent's turn
+                    if (await _page.IsGameOverAsync())
+                    {
+                        return;
+                    }
+
+                    // Check if it's our turn now
+                    if (await _page.IsMyTurnAsync())
+                    {
+                        return;
+                    }
+                }
+                catch (Exception ex)
+                {
+                    // Handle locator errors that may occur when game ends
+                    _logger.LogWarning(ex, "Error checking turn status - verifying if game ended");
+                    
+                    // Verify if game is over (UI elements may have changed/disappeared)
+                    try
+                    {
+                        if (await _page.IsGameOverAsync())
+                        {
+                            return;
+                        }
+                    }
+                    catch
+                    {
+                        // If we can't check game status, log and continue waiting
+                        _logger.LogWarning("Unable to verify game status, continuing to wait");
+                    }
+                }
+
+                await Task.Delay(pollInterval);
+                waited += pollInterval;
+            }
+
+            if (waited >= maxWaitTime)
+            {
+                _logger.LogWarning("Waited {Seconds} seconds for opponent turn - possible timeout", maxWaitTime / 1000);
+            }
         }
 
         private static FailureReason MapFailureReason(GameResult result) => result switch

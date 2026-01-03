@@ -52,8 +52,34 @@ namespace BattleShipGame.Pages
 
         public async Task<bool> IsMyTurnAsync()
         {
-            var statusMoveOn = await _page.Locator(".notification__move-on").InnerTextAsync();
-            return statusMoveOn.Contains("Your turn.", StringComparison.OrdinalIgnoreCase);
+            try
+            {
+                // Check for "Your turn." message
+                var statusMoveOn = await _page.Locator(".notification__move-on").InnerTextAsync();
+                if (statusMoveOn.Contains("Your turn.", StringComparison.OrdinalIgnoreCase)
+                    || statusMoveOn.Contains("The game started, your turn.", StringComparison.OrdinalIgnoreCase))
+                    return true;
+
+                // Also check for opponent's turn message to confirm it's NOT our turn
+                var statusMoveOff = await _page.Locator(".notification__move-off").InnerTextAsync();
+                if (statusMoveOff.Contains("Opponent's turn", StringComparison.OrdinalIgnoreCase)
+                    || statusMoveOff.Contains("please wait", StringComparison.OrdinalIgnoreCase))
+                    return false;
+
+                return false;
+            }
+            catch
+            {
+                // If selector fails, try alternative approach
+                var allNotifications = await _page.Locator(".notification-message").AllInnerTextsAsync();
+                foreach (var notification in allNotifications)
+                {
+                    if (notification.Contains("Your turn.", StringComparison.OrdinalIgnoreCase)
+                        || notification.Contains("The game started, your turn.", StringComparison.OrdinalIgnoreCase))
+                        return true;
+                }
+                return false;
+            }
         }
 
         public async Task FireAtAsync(Coordinate coord)
@@ -65,14 +91,24 @@ namespace BattleShipGame.Pages
 
         public async Task<CellState> ReadLastShotResultAsync(Coordinate coord)
         {
-            // Could be reading CSS classes on last clicked cell (hit/miss), or reading text
-            var isCellHit = await _page.Locator($".battlefield__rival .battlefield-table .battlefield-cell__hit .battlefield-cell-content[data-y='{coord.Row}'][data-x='{coord.Col}']").IsVisibleAsync();
-            var isCellSunk = await _page.Locator($".battlefield__rival .battlefield-table .battlefield-cell__done .battlefield-cell-content[data-y='{coord.Row}'][data-x='{coord.Col}']").IsVisibleAsync();
+            // More reliable approach: Check parent element for hit/sunk classes
+            // The cell structure is: .battlefield-cell (parent with hit/done class) > .battlefield-cell-content (child)
+            var cellLocator = _page.Locator($".battlefield__rival .battlefield-table .battlefield-cell-content[data-y='{coord.Row}'][data-x='{coord.Col}']");
+            
+            try
+            {
+                var hitParentCss = _page.Locator($".battlefield__rival .battlefield-table .battlefield-cell.battlefield-cell__hit .battlefield-cell-content[data-y='{coord.Row}'][data-x='{coord.Col}']");
+                if (await hitParentCss.IsVisibleAsync().ConfigureAwait(false))
+                    return CellState.Hit;
 
-            if (isCellHit == true)
-                return CellState.Hit;
-            if (isCellSunk == true)
-                return CellState.Sunk;
+                var sunkParentCss = _page.Locator($".battlefield__rival .battlefield-table .battlefield-cell.battlefield-cell__done .battlefield-cell-content[data-y='{coord.Row}'][data-x='{coord.Col}']");
+                if (await sunkParentCss.IsVisibleAsync().ConfigureAwait(false))
+                    return CellState.Sunk;
+            }
+            catch
+            {
+                // Fallback: If selectors fail, assume Miss (will be retried by service layer)
+            }
 
             return CellState.Miss;
         }
@@ -93,6 +129,7 @@ namespace BattleShipGame.Pages
 
         public async Task<GameResult> ReadGameResultAsync()
         {
+            // Strategy 1: Try .notification-message (primary selector for game-over messages)
             var locator = _page.Locator(".notification-message");
 
             string[] texts;
@@ -102,45 +139,120 @@ namespace BattleShipGame.Pages
             }
             catch
             {
-                var count = await locator.CountAsync();
-                var arr = new string[count];
-                for (int i = 0; i < count; i++)
+                // Strategy 2: Fallback - try to get count and read individually
+                try
                 {
-                    arr[i] = await locator.Nth(i).InnerTextAsync() ?? string.Empty;
+                    var count = await locator.CountAsync();
+                    var arr = new string[count];
+                    for (int i = 0; i < count; i++)
+                    {
+                        arr[i] = await locator.Nth(i).InnerTextAsync() ?? string.Empty;
+                    }
+                    texts = arr;
                 }
-                texts = arr;
+                catch
+                {
+                    // Strategy 3: Alternative - check for restart button presence and read any visible notification text
+                    // If restart button exists, game is definitely over, try reading from page text content
+                    var restartButton = _page.Locator(".notification-submit.restart");
+                    var hasRestartButton = await restartButton.IsVisibleAsync();
+                    
+                    if (hasRestartButton)
+                    {
+                        // Try reading from the button's parent container or nearby notification elements
+                        var notificationContainer = _page.Locator(".notification");
+                        var notificationTexts = await notificationContainer.AllInnerTextsAsync();
+                        texts = notificationTexts.ToArray();
+                    }
+                    else
+                    {
+                        texts = Array.Empty<string>();
+                    }
+                }
             }
 
             if (texts == null || texts.Length == 0)
                 return GameResult.Unknown;
 
+            // Combine all notification texts into a single string for comprehensive checking
+            var textList = new List<string>();
             foreach (var text in texts)
             {
-                if (string.IsNullOrWhiteSpace(text))
-                    continue;
-
-                if (text.IndexOf("you won", StringComparison.OrdinalIgnoreCase) >= 0
-                    || text.IndexOf("won", StringComparison.OrdinalIgnoreCase) >= 0)
-                    return GameResult.Victory;
-
-                if (text.IndexOf("you lose", StringComparison.OrdinalIgnoreCase) >= 0
-                    || text.IndexOf("lose", StringComparison.OrdinalIgnoreCase) >= 0)
-                    return GameResult.Defeat;
-
-                if (text.IndexOf("opponent has left", StringComparison.OrdinalIgnoreCase) >= 0
-                    || text.IndexOf("left", StringComparison.OrdinalIgnoreCase) >= 0)
-                    return GameResult.OpponentLeft;
-
-                if (text.IndexOf("connection lost", StringComparison.OrdinalIgnoreCase) >= 0
-                    || text.IndexOf("connection", StringComparison.OrdinalIgnoreCase) >= 0)
-                    return GameResult.ConnectionLost;
-
-                if (text.IndexOf("timeout", StringComparison.OrdinalIgnoreCase) >= 0
-                    || text.IndexOf("timed out", StringComparison.OrdinalIgnoreCase) >= 0)
-                    return GameResult.Timeout;
+                if (!string.IsNullOrWhiteSpace(text))
+                {
+                    textList.Add(text);
+                }
             }
 
+            var combinedText = string.Join(" ", textList);
+
+            if (string.IsNullOrWhiteSpace(combinedText))
+                return GameResult.Unknown;
+
+            // Check in order of priority (game outcome first, then connection issues)
+            
+            // PRIORITY 1: Victory - Check for victory messages first (most specific to least specific)
+            if (combinedText.IndexOf("congratulations", StringComparison.OrdinalIgnoreCase) >= 0
+                && combinedText.IndexOf("won", StringComparison.OrdinalIgnoreCase) >= 0)
+                return GameResult.Victory;
+
+            if (combinedText.IndexOf("you won", StringComparison.OrdinalIgnoreCase) >= 0)
+                return GameResult.Victory;
+
+            if (combinedText.IndexOf("game over", StringComparison.OrdinalIgnoreCase) >= 0
+                && combinedText.IndexOf("won", StringComparison.OrdinalIgnoreCase) >= 0
+                && combinedText.IndexOf("lose", StringComparison.OrdinalIgnoreCase) < 0) // Ensure it's not a defeat message
+                return GameResult.Victory;
+
+            // PRIORITY 2: Defeat - Check for defeat messages (most specific to least specific)
+            if (combinedText.IndexOf("you lose", StringComparison.OrdinalIgnoreCase) >= 0)
+                return GameResult.Defeat;
+
+            if (combinedText.IndexOf("game over", StringComparison.OrdinalIgnoreCase) >= 0
+                && combinedText.IndexOf("lose", StringComparison.OrdinalIgnoreCase) >= 0)
+                return GameResult.Defeat;
+
+            // PRIORITY 3: Opponent Left - Must be specific to avoid false matches
+            // Only match if it explicitly says "opponent has left" or "your opponent has left"
+            // and NOT if it's part of a victory/defeat message
+            if ((combinedText.IndexOf("your opponent has left", StringComparison.OrdinalIgnoreCase) >= 0
+                || combinedText.IndexOf("opponent has left", StringComparison.OrdinalIgnoreCase) >= 0)
+                && combinedText.IndexOf("won", StringComparison.OrdinalIgnoreCase) < 0
+                && combinedText.IndexOf("lose", StringComparison.OrdinalIgnoreCase) < 0)
+                return GameResult.OpponentLeft;
+
+            // PRIORITY 4: Server/Connection issues
+            if (combinedText.IndexOf("server is unavailable", StringComparison.OrdinalIgnoreCase) >= 0
+                || combinedText.IndexOf("unexpected error", StringComparison.OrdinalIgnoreCase) >= 0
+                || combinedText.IndexOf("further play is impossible", StringComparison.OrdinalIgnoreCase) >= 0)
+                return GameResult.ConnectionLost;
+
+            if (combinedText.IndexOf("connection lost", StringComparison.OrdinalIgnoreCase) >= 0)
+                return GameResult.ConnectionLost;
+
+            // PRIORITY 5: Timeout
+            if (combinedText.IndexOf("timeout", StringComparison.OrdinalIgnoreCase) >= 0
+                || combinedText.IndexOf("timed out", StringComparison.OrdinalIgnoreCase) >= 0)
+                return GameResult.Timeout;
+
             return GameResult.Unknown;
+        }
+
+        /// <summary>
+        /// Checks if the restart button is visible, indicating the game has ended.
+        /// </summary>
+        public async Task<bool> IsRestartButtonVisibleAsync()
+        {
+            try
+            {
+                var restartButton = _page.Locator(".notification-submit.restart");
+                return await restartButton.IsVisibleAsync();
+            }
+            catch
+            {
+                // If we can't check visibility, assume restart button is not visible
+                return false;
+            }
         }
 
         public async Task<bool> IsGameOverAsync()

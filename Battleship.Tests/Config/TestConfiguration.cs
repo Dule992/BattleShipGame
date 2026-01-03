@@ -28,7 +28,14 @@ namespace BattleShipGame.Battleship.Tests.Config
             LoggingConfig.LogDirectory = RawConfiguration["Logging:LogDirectory"];
             LoggingConfig.FileName = RawConfiguration["Logging:FileName"];
 
-            AllureConfig.ResultsDirectory = RawConfiguration["Allure:ResultsDirectory"];
+            // Set Allure results directory (use absolute path based on output directory)
+            var allureResultsDir = RawConfiguration["Allure:ResultsDirectory"] ?? "allure-results";
+            if (!Path.IsPathRooted(allureResultsDir))
+            {
+                // Convert relative path to absolute path based on test output directory
+                allureResultsDir = Path.Combine(AppContext.BaseDirectory, allureResultsDir);
+            }
+            AllureConfig.ResultsDirectory = allureResultsDir;
         }
     }
 }

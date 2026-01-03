@@ -1,4 +1,4 @@
-﻿using Allure.Net.Commons;
+using Allure.Net.Commons;
 using Allure.NUnit;
 using Allure.NUnit.Attributes;
 using Battleship.Tests.Fixtures;
@@ -10,6 +10,7 @@ using Microsoft.Extensions.Logging;
 using Microsoft.Playwright;
 using NUnit.Framework;
 using System.Runtime.CompilerServices;
+using System.Text;
 
 namespace Battleship.Tests.Tests
 {
@@ -28,7 +29,22 @@ namespace Battleship.Tests.Tests
         public void OneTimeSetUp()
         {
             RuntimeHelpers.RunClassConstructor(typeof(TestConfiguration).TypeHandle);
-            Directory.CreateDirectory(AllureConfig.ResultsDirectory);
+            
+            // Ensure Allure results directory exists
+            if (!string.IsNullOrEmpty(AllureConfig.ResultsDirectory))
+            {
+                Directory.CreateDirectory(AllureConfig.ResultsDirectory);
+            }
+            else
+            {
+                // Fallback to default location if not configured
+                var defaultResultsDir = Path.Combine(AppContext.BaseDirectory, "allure-results");
+                Directory.CreateDirectory(defaultResultsDir);
+                AllureConfig.ResultsDirectory = defaultResultsDir;
+            }
+            
+            // Configure Allure to use the results directory
+            AllureLifecycle.Instance.CleanupResultDirectory();
         }
 
         [SetUp]
@@ -43,42 +59,81 @@ namespace Battleship.Tests.Tests
             _gameService = new BattleshipGameService(_battleShipGamePage, _logger);
         }
 
-        [OneTimeTearDown]
+        [TearDown]
         public async Task TearDown()
         {
             try
             {
-                if (TestContext.CurrentContext.Result.Outcome.Status == NUnit.Framework.Interfaces.TestStatus.Failed)
+                var testStatus = TestContext.CurrentContext.Result.Outcome.Status;
+                var testName = TestContext.CurrentContext.Test.Name;
+                var timestamp = DateTime.UtcNow.ToString("yyyyMMdd_HHmmss");
+
+                // Always attach move log (for both pass and fail)
+                if (_gameService?.MoveLog != null && _gameService.MoveLog.Count > 0)
                 {
-                    // Screenshot on failure
-                    var screenshotPath = Path.Combine(
-                        AllureConfig.ResultsDirectory,
-                        $"screenshot_{DateTime.UtcNow:yyyyMMdd_HHmmss}.png");
-
-                    await _page.ScreenshotAsync(new PageScreenshotOptions
-                    {
-                        Path = screenshotPath,
-                        FullPage = true
-                    });
-
-                    AllureApi.AddAttachment(
-                        "Failure screenshot",
-                        "image/png",
-                        screenshotPath);
-
-                    // Move log attachment
                     var moveLogPath = Path.Combine(
-                        AllureConfig.ResultsDirectory,
-                        $"movelog_{DateTime.UtcNow:yyyyMMdd_HHmmss}.txt");
+                        AllureConfig.ResultsDirectory ?? AppContext.BaseDirectory,
+                        $"movelog_{testName}_{timestamp}.txt");
 
                     await File.WriteAllLinesAsync(moveLogPath, _gameService.MoveLog.ToArray());
 
-                    // Attach move log to Allure using AddAttachment from Allure.Commons
                     AllureApi.AddAttachment(
-                        "Move log",
+                        "Move Log",
                         "text/plain",
                         moveLogPath);
                 }
+
+                // Attach screenshot for failures or always (configurable)
+                if (_page != null)
+                {
+                    var screenshotPath = Path.Combine(
+                        AllureConfig.ResultsDirectory ?? AppContext.BaseDirectory,
+                        $"screenshot_{testName}_{timestamp}.png");
+
+                    try
+                    {
+                        await _page.ScreenshotAsync(new PageScreenshotOptions
+                        {
+                            Path = screenshotPath,
+                            FullPage = true
+                        });
+
+                        if (testStatus == NUnit.Framework.Interfaces.TestStatus.Failed)
+                        {
+                            AllureApi.AddAttachment(
+                                "Failure Screenshot",
+                                "image/png",
+                                screenshotPath);
+                        }
+                        else
+                        {
+                            // Optionally attach screenshot for passed tests too
+                            AllureApi.AddAttachment(
+                                "Test Screenshot",
+                                "image/png",
+                                screenshotPath);
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        // Log but don't fail if screenshot fails
+                        TestContext.WriteLine($"Failed to capture screenshot: {ex.Message}");
+                    }
+                }
+
+                // Add test result summary
+                if (testStatus == NUnit.Framework.Interfaces.TestStatus.Failed)
+                {
+                    var failureMessage = TestContext.CurrentContext.Result.Message;
+                    AllureApi.AddAttachment(
+                        "Test Failure Details",
+                        "text/plain",
+                        Encoding.UTF8.GetBytes(failureMessage ?? "Test failed"));
+                }
+            }
+            catch (Exception ex)
+            {
+                TestContext.WriteLine($"Error in TearDown: {ex.Message}");
             }
             finally
             {
@@ -86,8 +141,7 @@ namespace Battleship.Tests.Tests
             }
         }
 
-        [TearDown]
-        public async Task Cleanup()
+        private async Task Cleanup()
         {
             if (_page != null)
             {
@@ -102,17 +156,47 @@ namespace Battleship.Tests.Tests
         [AllureDescription("Plays a full game of Battleship. Test PASS only if game ends in victory.")]
         public async Task FullGame_ShouldPassOnlyOnVictory()
         {
-            (GameResult result, FailureReason failureReason) = await _gameService.PlayFullGameAsync(
-                GameConfig.BaseUrl,
-                overallTimeout: TimeSpan.FromMinutes(GameConfig.OverallGameTimeoutMinutes),
-                opponentConnectTimeout: TimeSpan.FromSeconds(GameConfig.OpponentConnectTimeoutSeconds));
-
-            if (result == GameResult.Victory)
+            await AllureApi.Step("Initialize and start Battleship game", async () =>
             {
-                Assert.Pass("Game ended in victory – test successful.");
-            }
+                _logger.LogInformation("Starting full game test");
+            });
 
-            Assert.Fail($"Game did not end in victory. Result: {result}, reason: {failureReason}");
+            (GameResult result, FailureReason failureReason) = await AllureApi.Step(
+                "Play full Battleship game",
+                async () => await _gameService.PlayFullGameAsync(
+                    GameConfig.BaseUrl,
+                    overallTimeout: TimeSpan.FromMinutes(GameConfig.OverallGameTimeoutMinutes),
+                    opponentConnectTimeout: TimeSpan.FromSeconds(GameConfig.OpponentConnectTimeoutSeconds)));
+
+            await AllureApi.Step("Verify game result", async () =>
+            {
+                // Add game result as attachment
+                var resultSummary = $"Game Result: {result}\nFailure Reason: {failureReason}\nTotal Moves: {_gameService.MoveLog.Count}";
+                AllureApi.AddAttachment(
+                    "Game Result Summary",
+                    "text/plain",
+                    Encoding.UTF8.GetBytes(resultSummary));
+
+                if (result == GameResult.Victory)
+                {
+                    AllureApi.AddAttachment(
+                        "Victory Confirmation",
+                        "text/plain",
+                        Encoding.UTF8.GetBytes("✓ Game ended in VICTORY - Test PASSED"));
+                    
+                    Assert.Pass("Game ended in victory – test successful.");
+                }
+                else
+                {
+                    var failureDetails = $"Game did not end in victory.\nResult: {result}\nReason: {failureReason}";
+                    AllureApi.AddAttachment(
+                        "Failure Details",
+                        "text/plain",
+                        Encoding.UTF8.GetBytes(failureDetails));
+                    
+                    Assert.Fail(failureDetails);
+                }
+            });
         }
     }
 }

@@ -6,6 +6,5 @@ public enum FailureReason
     Defeat,
     OpponentLeft,
     ConnectionLost,
-    Timeout,
     Unknown
 }

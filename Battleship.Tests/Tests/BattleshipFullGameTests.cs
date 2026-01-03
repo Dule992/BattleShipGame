@@ -170,6 +170,9 @@ namespace Battleship.Tests.Tests
 
             await AllureApi.Step("Verify game result", async () =>
             {
+                // Log the actual result for debugging
+                _logger.LogInformation("Game completed. Result: {Result}, FailureReason: {FailureReason}", result, failureReason);
+                
                 // Add game result as attachment
                 var resultSummary = $"Game Result: {result}\nFailure Reason: {failureReason}\nTotal Moves: {_gameService.MoveLog.Count}";
                 AllureApi.AddAttachment(
@@ -177,8 +180,17 @@ namespace Battleship.Tests.Tests
                     "text/plain",
                     Encoding.UTF8.GetBytes(resultSummary));
 
-                if (result == GameResult.Victory)
+                // Explicitly check for Victory - ensure we're comparing enum values correctly
+                bool isVictory = result == GameResult.Victory;
+                
+                // Log the actual enum value and comparison result for debugging
+                _logger.LogInformation("Result enum value: {Result}, IsVictory: {IsVictory}", 
+                    result, isVictory);
+                
+                // Only pass if result is explicitly Victory
+                if (isVictory && result == GameResult.Victory)
                 {
+                    _logger.LogInformation("✓ Victory confirmed - Test will PASS");
                     AllureApi.AddAttachment(
                         "Victory Confirmation",
                         "text/plain",
@@ -188,6 +200,10 @@ namespace Battleship.Tests.Tests
                 }
                 else
                 {
+                    // Log non-victory result with explicit details
+                    _logger.LogWarning("✗ Game did NOT end in victory. Result: {Result}, Reason: {Reason} - Test will FAIL", 
+                        result, failureReason);
+                    
                     var failureDetails = $"Game did not end in victory.\nResult: {result}\nReason: {failureReason}";
                     AllureApi.AddAttachment(
                         "Failure Details",

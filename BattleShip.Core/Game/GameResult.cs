@@ -4,6 +4,5 @@
     Defeat,
     OpponentLeft,
     ConnectionLost,
-    Timeout,
     Unknown
 }

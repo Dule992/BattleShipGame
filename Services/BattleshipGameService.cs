@@ -29,25 +29,16 @@ namespace Battleship.UI.Services
             TimeSpan overallTimeout,
             TimeSpan opponentConnectTimeout)
         {
+            // Note: opponentConnectTimeout parameter is reserved for future use
             var startTime = DateTime.UtcNow;
 
             _logger.LogInformation("Starting Battleship game. BaseUrl={BaseUrl}", baseUrl);
             await InitializeGameAsync(baseUrl);
 
             // Main game loop
-            while (!await _page.IsGameOverAsync())
+            while (!await _page.IsRestartButtonVisibleAsync())
             {
-                if (IsTimeoutExceeded(startTime, overallTimeout, out var timeoutResult))
-                {
-                    return timeoutResult;
-                }
-
-                // Check if restart button is visible (game ended) before executing turn
-                if (await _page.IsRestartButtonVisibleAsync())
-                {
-                    _logger.LogInformation("Restart button detected - game has ended");
-                    return await HandleGameCompletionAsync();
-                }
+                Thread.Sleep(1000);
 
                 if (await _page.IsMyTurnAsync())
                 {
@@ -90,26 +81,6 @@ namespace Battleship.UI.Services
         }
 
         /// <summary>
-        /// Checks if the overall timeout has been exceeded and returns timeout result if so.
-        /// </summary>
-        private bool IsTimeoutExceeded(
-            DateTime startTime,
-            TimeSpan overallTimeout,
-            out (GameResult Result, FailureReason FailureReason) result)
-        {
-            if ((DateTime.UtcNow - startTime) > overallTimeout)
-            {
-                _logger.LogWarning("Game timed out after {Minutes} minutes.", overallTimeout.TotalMinutes);
-                _moveLog.Add($"STATE: Game timed out after {overallTimeout.TotalMinutes} minutes");
-                result = (GameResult.Timeout, FailureReason.Timeout);
-                return true;
-            }
-
-            result = default;
-            return false;
-        }
-
-        /// <summary>
         /// Executes a turn with error handling. Returns game result if game ended during execution.
         /// </summary>
         private async Task<(GameResult Result, FailureReason FailureReason)?> ExecuteTurnSafelyAsync()
@@ -119,10 +90,21 @@ namespace Battleship.UI.Services
                 await ExecuteTurnAsync();
                 return null; // Game continues
             }
-            catch (System.TimeoutException ex)
+            catch (InvalidOperationException ex) when (ex.Message.Contains("Game has ended"))
+            {
+                // Game ended during firing - return result immediately
+                _logger.LogInformation("Game ended detected: {Message}", ex.Message);
+                return await GetFinalGameResultAsync();
+            }
+            catch (TimeoutException ex)
             {
                 // Handle timeout exception - game likely ended during turn execution
                 _logger.LogWarning(ex, "Game ended during turn execution");
+                return await GetFinalGameResultAsync();
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Unexpected error during turn execution");
                 return await GetFinalGameResultAsync();
             }
         }
@@ -136,7 +118,6 @@ namespace Battleship.UI.Services
             var failureReason = MapFailureReason(gameResult);
             return (gameResult, failureReason);
         }
-
 
         /// <summary>
         /// Handles game completion: reads result, logs outcome, and returns final result.
@@ -186,6 +167,13 @@ namespace Battleship.UI.Services
         /// </summary>
         private async Task ExecuteTurnAsync()
         {
+            // Check if restart button is visible before firing (game may have ended)
+            if (await _page.IsRestartButtonVisibleAsync())
+            {
+                _logger.LogInformation("Restart button detected - game has ended");
+                throw new InvalidOperationException("Game has ended - cannot fire shot");
+            }
+
             var nextShot = _strategy.GetNextShot(_board);
             _logger.LogInformation("Firing at {Coordinate}", nextShot);
             _moveLog.Add($"SHOT: {nextShot}");
@@ -211,14 +199,16 @@ namespace Battleship.UI.Services
         /// </summary>
         private async Task<CellState> ReadShotResultWithRetryAsync(Coordinate coord, int maxRetries = 5)
         {
+            CellState lastResult = CellState.Miss;
+            
             for (int attempt = 1; attempt <= maxRetries; attempt++)
             {
-                var result = await _page.ReadLastShotResultAsync(coord);
+                lastResult = await _page.ReadLastShotResultAsync(coord);
 
                 // If we get a non-Miss result, return it immediately
-                if (result != CellState.Miss)
+                if (lastResult != CellState.Miss)
                 {
-                    return result;
+                    return lastResult;
                 }
 
                 // If it's still showing as Miss, wait a bit longer and retry
@@ -229,7 +219,7 @@ namespace Battleship.UI.Services
             }
 
             // After all retries, return what we got (likely Miss)
-            return await _page.ReadLastShotResultAsync(coord);
+            return lastResult;
         }
 
         /// <summary>
@@ -242,11 +232,6 @@ namespace Battleship.UI.Services
                 case CellState.Hit:
                     _logger.LogInformation("✓ HIT at {Coordinate} - Ship damaged!", coord);
                     _moveLog.Add($"STATE: Hit detected at {coord}");
-                    break;
-
-                case CellState.Sunk:
-                    _logger.LogInformation("✓✓ SUNK at {Coordinate} - Ship destroyed!", coord);
-                    _moveLog.Add($"STATE: Ship SUNK at {coord}");
                     break;
 
                 case CellState.Miss:
@@ -273,7 +258,7 @@ namespace Battleship.UI.Services
                 try
                 {
                     // Check if game ended during opponent's turn
-                    if (await _page.IsGameOverAsync())
+                    if (await _page.IsGameOverAsync() || await _page.IsRestartButtonVisibleAsync())
                     {
                         return;
                     }
@@ -288,11 +273,11 @@ namespace Battleship.UI.Services
                 {
                     // Handle locator errors that may occur when game ends
                     _logger.LogWarning(ex, "Error checking turn status - verifying if game ended");
-                    
+
                     // Verify if game is over (UI elements may have changed/disappeared)
                     try
                     {
-                        if (await _page.IsGameOverAsync())
+                        if (await _page.IsGameOverAsync() || await _page.IsRestartButtonVisibleAsync())
                         {
                             return;
                         }
@@ -320,7 +305,6 @@ namespace Battleship.UI.Services
             GameResult.Defeat => FailureReason.Defeat,
             GameResult.OpponentLeft => FailureReason.OpponentLeft,
             GameResult.ConnectionLost => FailureReason.ConnectionLost,
-            GameResult.Timeout => FailureReason.Timeout,
             _ => FailureReason.Unknown
         };
     }

@@ -160,7 +160,7 @@ namespace BattleShipGame.Pages
                     if (hasRestartButton)
                     {
                         // Try reading from the button's parent container or nearby notification elements
-                        var notificationContainer = _page.Locator(".notification");
+                        var notificationContainer = _page.Locator(".notification-message");
                         var notificationTexts = await notificationContainer.AllInnerTextsAsync();
                         texts = notificationTexts.ToArray();
                     }
@@ -192,48 +192,24 @@ namespace BattleShipGame.Pages
             // Check in order of priority (game outcome first, then connection issues)
             
             // PRIORITY 1: Victory - Check for victory messages first (most specific to least specific)
-            if (combinedText.IndexOf("congratulations", StringComparison.OrdinalIgnoreCase) >= 0
-                && combinedText.IndexOf("won", StringComparison.OrdinalIgnoreCase) >= 0)
-                return GameResult.Victory;
-
-            if (combinedText.IndexOf("you won", StringComparison.OrdinalIgnoreCase) >= 0)
-                return GameResult.Victory;
-
-            if (combinedText.IndexOf("game over", StringComparison.OrdinalIgnoreCase) >= 0
-                && combinedText.IndexOf("won", StringComparison.OrdinalIgnoreCase) >= 0
-                && combinedText.IndexOf("lose", StringComparison.OrdinalIgnoreCase) < 0) // Ensure it's not a defeat message
+            // Check "you won" first as it's the most specific victory indicator
+            if (combinedText.IndexOf("Game over. Congratulations, you won!", StringComparison.OrdinalIgnoreCase) >= 0)
                 return GameResult.Victory;
 
             // PRIORITY 2: Defeat - Check for defeat messages (most specific to least specific)
-            if (combinedText.IndexOf("you lose", StringComparison.OrdinalIgnoreCase) >= 0)
+            // Check "you lose" first as it's the most specific defeat indicator
+            if (combinedText.IndexOf("Game over. You lose.", StringComparison.OrdinalIgnoreCase) >= 0)
                 return GameResult.Defeat;
-
-            if (combinedText.IndexOf("game over", StringComparison.OrdinalIgnoreCase) >= 0
-                && combinedText.IndexOf("lose", StringComparison.OrdinalIgnoreCase) >= 0)
-                return GameResult.Defeat;
-
+                
             // PRIORITY 3: Opponent Left - Must be specific to avoid false matches
             // Only match if it explicitly says "opponent has left" or "your opponent has left"
             // and NOT if it's part of a victory/defeat message
-            if ((combinedText.IndexOf("your opponent has left", StringComparison.OrdinalIgnoreCase) >= 0
-                || combinedText.IndexOf("opponent has left", StringComparison.OrdinalIgnoreCase) >= 0)
-                && combinedText.IndexOf("won", StringComparison.OrdinalIgnoreCase) < 0
-                && combinedText.IndexOf("lose", StringComparison.OrdinalIgnoreCase) < 0)
+            if (combinedText.IndexOf("Your opponent has left the game.", StringComparison.OrdinalIgnoreCase) >= 0)
                 return GameResult.OpponentLeft;
 
             // PRIORITY 4: Server/Connection issues
-            if (combinedText.IndexOf("server is unavailable", StringComparison.OrdinalIgnoreCase) >= 0
-                || combinedText.IndexOf("unexpected error", StringComparison.OrdinalIgnoreCase) >= 0
-                || combinedText.IndexOf("further play is impossible", StringComparison.OrdinalIgnoreCase) >= 0)
+            if (combinedText.IndexOf("Unexpected error. Further play is impossible.", StringComparison.OrdinalIgnoreCase) >= 0)
                 return GameResult.ConnectionLost;
-
-            if (combinedText.IndexOf("connection lost", StringComparison.OrdinalIgnoreCase) >= 0)
-                return GameResult.ConnectionLost;
-
-            // PRIORITY 5: Timeout
-            if (combinedText.IndexOf("timeout", StringComparison.OrdinalIgnoreCase) >= 0
-                || combinedText.IndexOf("timed out", StringComparison.OrdinalIgnoreCase) >= 0)
-                return GameResult.Timeout;
 
             return GameResult.Unknown;
         }

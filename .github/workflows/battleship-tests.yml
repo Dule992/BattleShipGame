@@ -1,0 +1,92 @@
+name: Battleship E2E Tests
+
+on:
+  workflow_dispatch:
+  
+env:
+  DOTNET_VERSION: '8.0.x'
+
+jobs:
+  build:
+    name: Battleship E2E Test
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: ${{ env.DOTNET_VERSION }}
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      
+      - name: Install Allure CLI
+        run: npm install -g allure-commandline
+        
+      - name: Restore dependencies
+        run: dotnet restore BattleShipGame.csproj
+
+      - name: Install Playwright
+        run: npx playwright install --with-deps
+        working-directory: ./src/Battleship.Tests
+
+      - name: Build
+        run: dotnet build --configuration Release --no-restore
+
+      - name: Run tests
+        env:
+          ALLURE_CONFIG: allureConfig.json
+        run: dotnet test BattleShipGame.csproj --configuration Release --no-build --logger "trx;LogFileName=test-results.trx"
+
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results
+          path: |
+            ./TestResults
+            ./bin/Debug/net8.0/allure-results
+            ./allure-results
+
+      - name: Create Job Summary
+        if: always()
+        run: |
+          echo "# cocktail Test Results" >> $GITHUB_STEP_SUMMARY
+          echo "## BattleShipGame Test Summary" >> $GITHUB_STEP_SUMMARY
+          echo "* **Status**: ${{ steps.test-step.outcome }}" >> $GITHUB_STEP_SUMMARY
+          echo "* **Framework**: .NET ${{ env.DOTNET_VERSION }}" >> $GITHUB_STEP_SUMMARY
+          echo "* **OS**: ${{ runner.os }}" >> $GITHUB_STEP_SUMMARY
+          echo "* **Run Date**: $(date -u '+%Y-%m-%d %H:%M:%S UTC')" >> $GITHUB_STEP_SUMMARY
+          echo "* **Triggered by**: ${{ github.event_name }} from ${{ github.actor }}" >> $GITHUB_STEP_SUMMARY
+          echo "---" >> $GITHUB_STEP_SUMMARY"
+          echo "Detailed test results are available in [Allure Report] (https://pages.github.com/${{ github.repository }})" >> $GITHUB_STEP_SUMMARY)
+
+      - name: Load test report history
+        uses: actions/checkout@v4
+        if: always()
+        continue-on-error: true
+        with:
+          ref: gh-pages
+          path: gh-pages
+
+      # Optional: generate static Allure HTML report
+      - name: Generate Allure report
+        uses: simple-elf/allure-report-action@v1.11
+        if: always()
+        with:
+          gh_pages: gh-pages 
+          allure_history: allure-history
+          allure_results: ./allure-results
+
+      - name: Upload Allure test report
+        uses: peaceiris/actions-gh-pages@v4
+        if: always()
+        with:
+          github_token : ${{ secrets.GITHUB_TOKEN }}
+          publish_branch: gh-pages
+          publish_dir: allure-history
+

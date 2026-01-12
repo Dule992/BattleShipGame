@@ -60,7 +60,7 @@ jobs:
           echo "* **Status**: ${{ steps.test-step.outcome }}" >> $GITHUB_STEP_SUMMARY
           echo "* **Framework**: .NET ${{ env.DOTNET_VERSION }}" >> $GITHUB_STEP_SUMMARY
           echo "* **OS**: ${{ runner.os }}" >> $GITHUB_STEP_SUMMARY
-          echo "* **Run Date**: ${{ date -u '+%Y-%m-%d %H:%M:%S UTC' }}" >> $GITHUB_STEP_SUMMARY
+          echo "* **Run Date**: $(date -u '+%Y-%m-%d %H:%M:%S UTC')" >> $GITHUB_STEP_SUMMARY
           echo "* **Triggered by**: ${{ github.event_name }} from ${{ githab.actor }}" >> $GITHUB_STEP_SUMMARY
           echo "---" >> $GITHUB_STEP_SUMMARY"
           echo "Detailed test results are available in [Allure Report] (https://pages.github.com/${{ github.repository }})" >> $GITHUB_STEP_SUMMARY)

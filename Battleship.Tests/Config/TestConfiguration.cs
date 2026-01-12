@@ -33,9 +33,8 @@ namespace BattleShipGame.Battleship.Tests.Config
             if (!Path.IsPathRooted(allureResultsDir))
             {
                 // Convert relative path to absolute path based on test output directory
-                allureResultsDir = Path.Combine(AppContext.BaseDirectory, allureResultsDir);
+                AllureConfig.ResultsDirectory = Path.Combine(AppContext.BaseDirectory, allureResultsDir);
             }
-            AllureConfig.ResultsDirectory = allureResultsDir;
         }
     }
 }

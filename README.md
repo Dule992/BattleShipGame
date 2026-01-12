@@ -50,5 +50,4 @@ Battleship.Automation/
   .github/
     workflows/
       battleship-tests.yml        # GitHub Actions CI workflow
-  azure-pipelines.yml             # Azure DevOps pipeline definition
-  README.md
+    README.md

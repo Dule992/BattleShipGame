@@ -1,6 +1,4 @@
-﻿using System;
-
-public enum FailureReason
+﻿public enum FailureReason
 {
     None,
     Defeat,

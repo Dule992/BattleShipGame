@@ -50,7 +50,6 @@
                 _hitCluster.Clear();
                 _targetQueue.Clear();
             }
-            // Miss – nothing special
         }
 
         private IEnumerable<Coordinate> GetHuntPattern()

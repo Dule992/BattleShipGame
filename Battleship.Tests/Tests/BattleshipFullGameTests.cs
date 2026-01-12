@@ -29,20 +29,9 @@ namespace Battleship.Tests.Tests
         public void OneTimeSetUp()
         {
             RuntimeHelpers.RunClassConstructor(typeof(TestConfiguration).TypeHandle);
-            
-            // Ensure Allure results directory exists
-            if (!string.IsNullOrEmpty(AllureConfig.ResultsDirectory))
-            {
-                Directory.CreateDirectory(AllureConfig.ResultsDirectory);
-            }
-            else
-            {
-                // Fallback to default location if not configured
-                var defaultResultsDir = Path.Combine(AppContext.BaseDirectory, "allure-results");
-                Directory.CreateDirectory(defaultResultsDir);
-                AllureConfig.ResultsDirectory = defaultResultsDir;
-            }
-            
+
+            Environment.SetEnvironmentVariable("ALLURE_RESULTS_DIRECTORY", AllureConfig.ResultsDirectory);
+
             // Configure Allure to use the results directory
             AllureLifecycle.Instance.CleanupResultDirectory();
         }
@@ -72,7 +61,7 @@ namespace Battleship.Tests.Tests
                 if (_gameService?.MoveLog != null && _gameService.MoveLog.Count > 0)
                 {
                     var moveLogPath = Path.Combine(
-                        AllureConfig.ResultsDirectory ?? AppContext.BaseDirectory,
+                        AllureConfig.ResultsDirectory,
                         $"movelog_{testName}_{timestamp}.txt");
 
                     await File.WriteAllLinesAsync(moveLogPath, _gameService.MoveLog.ToArray());
@@ -87,7 +76,7 @@ namespace Battleship.Tests.Tests
                 if (_page != null)
                 {
                     var screenshotPath = Path.Combine(
-                        AllureConfig.ResultsDirectory ?? AppContext.BaseDirectory,
+                        AllureConfig.ResultsDirectory,
                         $"screenshot_{testName}_{timestamp}.png");
 
                     try

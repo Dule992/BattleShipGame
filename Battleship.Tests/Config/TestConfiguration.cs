@@ -11,7 +11,7 @@ namespace BattleShipGame.Battleship.Tests.Config
             var builder = new ConfigurationBuilder()
                 .SetBasePath(AppContext.BaseDirectory)
                 .AddJsonFile(Path.Combine("Battleship.Tests\\Config", "appsettings.json"), optional: false, reloadOnChange: false);
-            
+
             RawConfiguration = builder.Build();
 
             GameConfig.BaseUrl = RawConfiguration["Game:BaseUrl"];
@@ -23,10 +23,6 @@ namespace BattleShipGame.Battleship.Tests.Config
             PlaywrightConfig.Headless = bool.Parse(RawConfiguration["Playwright:Headless"]);
             PlaywrightConfig.SlowMoMilliseconds = int.Parse(RawConfiguration["Playwright:SlowMoMilliseconds"]);
             PlaywrightConfig.DefaultTimeoutMilliseconds = int.Parse(RawConfiguration["Playwright:DefaultTimeoutMilliseconds"]);
-
-            LoggingConfig.MinimumLevel = RawConfiguration["Logging:MinimumLevel"];
-            LoggingConfig.LogDirectory = RawConfiguration["Logging:LogDirectory"];
-            LoggingConfig.FileName = RawConfiguration["Logging:FileName"];
 
             // Set Allure results directory (use absolute path based on output directory)
             var allureResultsDir = RawConfiguration["Allure:ResultsDirectory"] ?? "allure-results";

@@ -1,11 +1,9 @@
 ﻿using BattleShipGame.Battleship.Tests.Config;
-using BattleShipGame.Battleship.Tests.Logging;
-using Microsoft.Extensions.Logging;
 using Microsoft.Playwright;
 using NUnit.Framework;
 using BrowserType = BattleShipGame.Battleship.Tests.Config.Enums.BrowserType;
 
-namespace Battleship.Tests.Fixtures
+namespace BattleShipGame.Battleship.Tests.Fixtures
 {
     [SetUpFixture]
     public class PlaywrightFixture
@@ -14,7 +12,6 @@ namespace Battleship.Tests.Fixtures
         private static IBrowserContext _browserContext;
         public static IBrowser Browser => _browser;
         public static IBrowserContext BrowserContext => _browserContext;
-        public static ILoggerFactory LoggerFactory => TestLogging.LoggerFactory;
 
         public static async Task InitPlaywright()
         {
@@ -24,9 +21,7 @@ namespace Battleship.Tests.Fixtures
             _browser = await CreateBrowserInstance(playwright, browserType).ConfigureAwait(false);
             _browserContext = await CreateBrowserContext(playwright, _browser).ConfigureAwait(false);
 
-            var logger = LoggerFactory.CreateLogger<PlaywrightFixture>();
-            logger.LogInformation("Initialising Playwright. Headless={Headless}, SlowMo={SlowMo}ms",
-                PlaywrightConfig.Headless, PlaywrightConfig.SlowMoMilliseconds);
+            Console.WriteLine($"Initialising Playwright. Headless={PlaywrightConfig.Headless}, SlowMo={PlaywrightConfig.SlowMoMilliseconds}ms");
 
             CreateBrowserInstance(playwright, BrowserType.CHROME).GetAwaiter().GetResult();
         }

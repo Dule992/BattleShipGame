@@ -1,7 +1,7 @@
 using BattleShipGame.BattleShip.Core.Strategy;
 using BattleShipGame.Pages;
-using Microsoft.Extensions.Logging;
-namespace Battleship.UI.Services
+
+namespace BattleShipGame.Services
 {
     public class BattleshipGameService
     {
@@ -9,31 +9,24 @@ namespace Battleship.UI.Services
         private readonly BoardState _board;
         private readonly IShotStrategy _strategy;
         private readonly Random _rnd = new();
-        private readonly ILogger<BattleshipGameService> _logger;
-        private readonly List<string> _moveLog = new();
 
-        public IReadOnlyList<string> MoveLog => _moveLog.AsReadOnly();
+        // MoveLog storage removed — writes go to Console instead.
+        public IReadOnlyList<string> MoveLog => Array.Empty<string>();
 
         public BattleshipGameService(
-            BattleshipGamePage page,
-            ILogger<BattleshipGameService> logger)
+            BattleshipGamePage page)
         {
             _page = page;
-            _logger = logger;
             _board = new BoardState(10);
             _strategy = new HuntTargetShotStrategy(_board);
         }
 
         public async Task<(GameResult Result, FailureReason FailureReason)> PlayFullGameAsync(
-            string baseUrl,
             TimeSpan overallTimeout,
             TimeSpan opponentConnectTimeout)
         {
             // Note: opponentConnectTimeout parameter is reserved for future use
             var startTime = DateTime.UtcNow;
-
-            _logger.LogInformation("Starting Battleship game. BaseUrl={BaseUrl}", baseUrl);
-            await InitializeGameAsync(baseUrl);
 
             // Main game loop
             while (!await _page.IsRestartButtonVisibleAsync())
@@ -58,25 +51,34 @@ namespace Battleship.UI.Services
         }
 
         /// <summary>
+        /// Open the game
+        /// </summary>
+        /// <param name="baseUrl"></param>
+        /// <returns></returns>
+        public async Task OpenTheGame(string baseUrl)
+        {
+            Console.WriteLine($"Starting Battleship game. BaseUrl={baseUrl}");
+            await _page.NavigateAsync(baseUrl);
+            Console.WriteLine("Page loaded. Choosing random opponent.");
+        }
+
+        /// <summary>
         /// Initializes the game: navigates, selects opponent, randomizes ships, and starts the game.
         /// </summary>
-        private async Task InitializeGameAsync(string baseUrl)
+        public async Task InitializeGameAsync()
         {
-            await _page.NavigateAsync(baseUrl);
-            _logger.LogInformation("Page loaded. Choosing random opponent.");
-
             await _page.ChooseRandomOpponentAsync();
 
             int randomClicks = _rnd.Next(1, 16);
-            _logger.LogInformation("Randomising ships {Clicks} time(s).", randomClicks);
+            Console.WriteLine($"Randomising ships {randomClicks} time(s).");
             await _page.RandomiseShipsAsync(randomClicks);
 
-            _logger.LogInformation("Clicking Play.");
+            Console.WriteLine("Clicking Play.");
             await _page.ClickPlayAsync();
 
             if (await _page.WaitForOpponentAsync())
             {
-                _logger.LogInformation("Opponent is ready.");
+                Console.WriteLine("Opponent is ready.");
             }
         }
 
@@ -93,18 +95,18 @@ namespace Battleship.UI.Services
             catch (InvalidOperationException ex) when (ex.Message.Contains("Game has ended"))
             {
                 // Game ended during firing - return result immediately
-                _logger.LogInformation("Game ended detected: {Message}", ex.Message);
+                Console.WriteLine($"Game ended detected: {ex.Message}");
                 return await GetFinalGameResultAsync();
             }
             catch (TimeoutException ex)
             {
                 // Handle timeout exception - game likely ended during turn execution
-                _logger.LogWarning(ex, "Game ended during turn execution");
+                Console.WriteLine($"Timeout during turn execution: {ex}");
                 return await GetFinalGameResultAsync();
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Unexpected error during turn execution");
+                Console.WriteLine($"Unexpected error during turn execution: {ex}");
                 return await GetFinalGameResultAsync();
             }
         }
@@ -128,12 +130,12 @@ namespace Battleship.UI.Services
 
             if (gameResult == GameResult.Victory)
             {
-                _logger.LogInformation("✓✓✓ Game ended in VICTORY! ✓✓✓");
-                _moveLog.Add("STATE: VICTORY - Game won!");
+                Console.WriteLine("✓✓✓ Game ended in VICTORY! ✓✓✓");
+                Console.WriteLine("STATE: VICTORY - Game won!");
             }
             else
             {
-                _logger.LogWarning("✗✗✗ Game ended without victory ✗✗✗");
+                Console.WriteLine("✗✗✗ Game ended without victory ✗✗✗");
                 LogGameEndWithoutVictory(gameResult, failureReason);
             }
 
@@ -145,19 +147,18 @@ namespace Battleship.UI.Services
         /// </summary>
         private void LogGameEndWithoutVictory(GameResult gameResult, FailureReason failureReason)
         {
-            _logger.LogInformation("Game ended without victory. Result={Result}, Reason={Reason}",
-                gameResult, failureReason);
+            Console.WriteLine($"Game ended without victory. Result={gameResult}, Reason={failureReason}");
 
             switch (gameResult)
             {
                 case GameResult.OpponentLeft:
-                    _logger.LogInformation("Opponent left the game.");
-                    _moveLog.Add("STATE: Opponent left the game.");
+                    Console.WriteLine("Opponent left the game.");
+                    Console.WriteLine("STATE: Opponent left the game.");
                     break;
 
                 case GameResult.ConnectionLost:
-                    _logger.LogInformation("Connection lost during the game.");
-                    _moveLog.Add("STATE: Connection lost.");
+                    Console.WriteLine("Connection lost during the game.");
+                    Console.WriteLine("STATE: Connection lost.");
                     break;
             }
         }
@@ -170,13 +171,13 @@ namespace Battleship.UI.Services
             // Check if restart button is visible before firing (game may have ended)
             if (await _page.IsRestartButtonVisibleAsync())
             {
-                _logger.LogInformation("Restart button detected - game has ended");
+                Console.WriteLine("Restart button detected - game has ended");
                 throw new InvalidOperationException("Game has ended - cannot fire shot");
             }
 
             var nextShot = _strategy.GetNextShot(_board);
-            _logger.LogInformation("Firing at {Coordinate}", nextShot);
-            _moveLog.Add($"SHOT: {nextShot}");
+            Console.WriteLine($"Firing at {nextShot}");
+            Console.WriteLine($"SHOT: {nextShot}");
 
             await _page.FireAtAsync(nextShot);
 
@@ -188,7 +189,7 @@ namespace Battleship.UI.Services
 
             // Log and record the result
             LogShotResult(nextShot, result);
-            _moveLog.Add($"RESULT: {nextShot} => {result}");
+            Console.WriteLine($"RESULT: {nextShot} => {result}");
 
             // Update strategy with the result (strategy updates board state internally)
             _strategy.RegisterShotResult(nextShot, result);
@@ -200,7 +201,7 @@ namespace Battleship.UI.Services
         private async Task<CellState> ReadShotResultWithRetryAsync(Coordinate coord, int maxRetries = 5)
         {
             CellState lastResult = CellState.Miss;
-            
+
             for (int attempt = 1; attempt <= maxRetries; attempt++)
             {
                 lastResult = await _page.ReadLastShotResultAsync(coord);
@@ -230,16 +231,16 @@ namespace Battleship.UI.Services
             switch (result)
             {
                 case CellState.Hit:
-                    _logger.LogInformation("✓ HIT at {Coordinate} - Ship damaged!", coord);
-                    _moveLog.Add($"STATE: Hit detected at {coord}");
+                    Console.WriteLine($"✓ HIT at {coord} - Ship damaged!");
+                    Console.WriteLine($"STATE: Hit detected at {coord}");
                     break;
 
                 case CellState.Miss:
-                    _logger.LogDebug("✗ Miss at {Coordinate}", coord);
+                    Console.WriteLine($"✗ Miss at {coord}");
                     break;
 
                 default:
-                    _logger.LogWarning("? Unknown result at {Coordinate}: {Result}", coord, result);
+                    Console.WriteLine($"? Unknown result at {coord}: {result}");
                     break;
             }
         }
@@ -272,7 +273,7 @@ namespace Battleship.UI.Services
                 catch (Exception ex)
                 {
                     // Handle locator errors that may occur when game ends
-                    _logger.LogWarning(ex, "Error checking turn status - verifying if game ended");
+                    Console.WriteLine($"Warning: Error checking turn status - verifying if game ended: {ex}");
 
                     // Verify if game is over (UI elements may have changed/disappeared)
                     try
@@ -285,7 +286,7 @@ namespace Battleship.UI.Services
                     catch
                     {
                         // If we can't check game status, log and continue waiting
-                        _logger.LogWarning("Unable to verify game status, continuing to wait");
+                        Console.WriteLine("Warning: Unable to verify game status, continuing to wait");
                     }
                 }
 
@@ -295,7 +296,7 @@ namespace Battleship.UI.Services
 
             if (waited >= maxWaitTime)
             {
-                _logger.LogWarning("Waited {Seconds} seconds for opponent turn - possible timeout", maxWaitTime / 1000);
+                Console.WriteLine($"Waited {maxWaitTime / 1000} seconds for opponent turn - possible timeout");
             }
         }
 

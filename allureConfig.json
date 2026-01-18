@@ -1,6 +1,39 @@
 {
   "allure": {
-    "directory": "allure-results",
-    "failExceptions": [ "NUnit.Framework.AssertionException" ]
+    "directory": "..\\..\\..\\allure-results",
+    "links": [
+      "https://issues.example.com/{issue}",
+      "https://tms.example.com/{tms}",
+      "https://jira.example.com/browse/{jira}"
+    ],
+    "gherkinPatterns": {
+      "grouping": {
+        "behaviors": {
+          "epic": "allure\\.epic:(.+)",
+          "story": "allure\\.story:(.+)"
+        },
+        "suites": {
+          "parentSuite": "allure\\.parentSuite:(.+)",
+          "suite": "allure\\.suite:(.+)",
+          "subSuite": "allure\\.subSuite:(.+)"
+        }
+      },
+      "metadata": {
+        "label": "allure\\.label\\.([^:]+):(.+)",
+        "owner": "allure\\.owner:(.+)",
+        "severity": "(normal|blocker|critical|minor|trivial)"
+      },
+      "links": {
+        "link": "allure\\.link:(.+)",
+        "issue": "allure\\.issue:(.+)",
+        "tms": "allure\\.tms:(.+)"
+      }
+    },
+    "failExceptions": [
+      "NUnit.Framework.AssertionException"
+    ],
+    "ignoreExceptions": [
+      "NUnit.Framework.SuccessException"
+    ]
   }
 }

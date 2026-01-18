@@ -10,7 +10,7 @@ namespace BattleShipGame.Battleship.Tests.Config
         {
             var builder = new ConfigurationBuilder()
                 .SetBasePath(AppContext.BaseDirectory)
-                .AddJsonFile(Path.Combine("Battleship.Tests\\Config", "appsettings.json"), optional: false, reloadOnChange: false);
+                .AddJsonFile(Path.Combine("Battleship.Tests/Config", "appsettings.json"), optional: false, reloadOnChange: false);
 
             RawConfiguration = builder.Build();
 

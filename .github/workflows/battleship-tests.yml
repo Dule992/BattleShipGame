@@ -2,67 +2,99 @@ name: Battleship E2E Tests
 
 on:
   workflow_dispatch:
-  
+
 env:
-  DOTNET_VERSION: '9.0.x'
+  DOTNET_VERSION: "9.0.x"
   SOLUTION_FILE: BattleShipGame.sln
   BUILD_CONFIGURATION: Debug
 
 jobs:
-    autotests:
-        name: Run tests and generate Allure Report
-        runs-on: ubuntu-latest
-        steps:
-            - uses: actions/checkout@v5
+  autotests:
+    name: Run tests and generate Allure Report
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
 
-            - name: Set up .NET
-              uses: actions/setup-dotnet@v4
-              with:
-                dotnet-version: |
-                    ${{ env.DOTNET_VERSION }}
+      - name: Set up .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: |
+            ${{ env.DOTNET_VERSION }}
 
-            - name: Restore NuGet packages
-              run: dotnet restore --packages .packages -p:ContinuousIntegrationBuild=true ${{ env.SOLUTION_FILE }}
+      - name: Restore NuGet packages
+        run: dotnet restore --packages .packages -p:ContinuousIntegrationBuild=true ${{ env.SOLUTION_FILE }}
 
-            - name: Build solution
-              run: dotnet build --no-restore --configuration ${{ env.BUILD_CONFIGURATION }} ${{ env.SOLUTION_FILE }}
+      - name: Build solution
+        run: dotnet build --no-restore --configuration ${{ env.BUILD_CONFIGURATION }} ${{ env.SOLUTION_FILE }}
 
-            - name: Test solution
-              run: dotnet test --no-build --configuration ${{ env.BUILD_CONFIGURATION }} ${{ env.SOLUTION_FILE }}
-              continue-on-error: true
+      - id: test-step
+        name: Test solution
+        run: dotnet test --no-build --configuration ${{ env.BUILD_CONFIGURATION }} ${{ env.SOLUTION_FILE }}
+        continue-on-error: true
+        
+      - name: Create Job Summary
+        if: always()
+        run: |
+          echo "# cocktail Test Results" >> $GITHUB_STEP_SUMMARY
+          echo "## BattleShipGame Test Summary" >> $GITHUB_STEP_SUMMARY
+          echo "* **Status**: ${{ steps.test-step.outcome }}" >> $GITHUB_STEP_SUMMARY
+          echo "* **Framework**: .NET ${{ env.DOTNET_VERSION }}" >> $GITHUB_STEP_SUMMARY
+          echo "* **OS**: ${{ runner.os }}" >> $GITHUB_STEP_SUMMARY
+          echo "* **Run Date**: $(date -u '+%Y-%m-%d %H:%M:%S UTC')" >> $GITHUB_STEP_SUMMARY
+          echo "* **Triggered by**: ${{ github.event_name }} from ${{ github.actor }}" >> $GITHUB_STEP_SUMMARY
+          echo "---" >> $GITHUB_STEP_SUMMARY
+          echo "Detailed test results are available in [Allure Report] (https://pages.github.com/${{ github.repository }})" >> $GITHUB_STEP_SUMMARY
 
-            - name: Create Job Summary
-              if: always()
-              run: |
-                echo "# cocktail Test Results" >> $GITHUB_STEP_SUMMARY
-                echo "## BattleShipGame Test Summary" >> $GITHUB_STEP_SUMMARY
-                echo "* **Status**: ${{ steps.test-step.outcome }}" >> $GITHUB_STEP_SUMMARY
-                echo "* **Framework**: .NET ${{ env.DOTNET_VERSION }}" >> $GITHUB_STEP_SUMMARY
-                echo "* **OS**: ${{ runner.os }}" >> $GITHUB_STEP_SUMMARY
-                echo "* **Run Date**: $(date -u '+%Y-%m-%d %H:%M:%S UTC')" >> $GITHUB_STEP_SUMMARY
-                echo "* **Triggered by**: ${{ github.event_name }} from ${{ github.actor }}" >> $GITHUB_STEP_SUMMARY
-                echo "---" >> $GITHUB_STEP_SUMMARY"
-                echo "Detailed test results are available in [Allure Report] (https://pages.github.com/${{ github.repository }})" >> $GITHUB_STEP_SUMMARY)
+      - name: Ensure gh-pages branch exists
+        if: always()
+        run: |
+          git remote set-url origin "https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git"
+          if ! git ls-remote --exit-code --heads origin gh-pages; then
+            echo "gh-pages not found on remote � creating initial gh-pages branch"
+            git fetch origin
+            git checkout --orphan gh-pages
+            git rm -rf .
+            git commit --allow-empty -m "Initial gh-pages commit"
+            git push origin gh-pages
+            git checkout -
+          else
+            echo "gh-pages branch exists on remote"
+          fi
 
-            - name: Get Allure history
-              uses: actions/checkout@v5
-              if: always()
-              continue-on-error: true
-              with:
-                ref: gh-pages
-                path: gh-pages
+      - name: Get Allure history
+        if: always()
+        continue-on-error: true
+        uses: actions/checkout@v5
+        with:
+          ref: gh-pages
+          path: gh-pages
 
-            - name: Generate Allure Report
-              uses: simple-elf/allure-report-action@v1.13
-              if: always()
-              with:
-                allure_results: allure-results
-                allure_history: allure-history
+      - name: Prepare Allure results & history
+        if: always()
+        run: |
+          if [ ! -d "./allure-results" ]; then
+            mkdir -p ./allure-results
+            echo "Created empty ./allure-results to avoid action failure"
+          fi
 
-            - name: Deploy report to GitHub Pages
-              if: always()
-              uses: peaceiris/actions-gh-pages@v4
-              with:
-                github_token: ${{ secrets.GITHUB_TOKEN }}
-                publish_dir: allure-history
-                publish_branch: gh-pages                
+          # Copy historical data from gh-pages if present
+          if [ -d "./gh-pages/history" ]; then
+            mkdir -p ./allure-results/history
+            cp -R ./gh-pages/history/* ./allure-results/history/ || true
+            echo "Copied gh-pages history into ./allure-results/history"
+          fi
+
+      - name: Generate Allure Report
+        uses: simple-elf/allure-report-action@v1.13
+        if: always()
+        with:
+          allure_results: allure-results
+          allure_history: allure-results/history
+
+      - name: Deploy report to GitHub Pages
+        if: always()
+        uses: peaceiris/actions-gh-pages@v4
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: allure-history
+          publish_branch: gh-pages

@@ -23,7 +23,6 @@ namespace BattleShipGame.Battleship.Tests.Tests
         [Given("I open Battle Ship online game")]
         public async Task GivenIOpenBattleShipOnlineGame()
         {
-            AllureApi.Step("I open Battle Ship online game");
             Console.WriteLine("Starting full game test");
             await _gameService.OpenTheGame(GameConfig.BaseUrl);
         }
@@ -31,21 +30,19 @@ namespace BattleShipGame.Battleship.Tests.Tests
         [When("I click play button to start game")]
         public async Task WhenIClickPlay()
         {
-            AllureApi.Step("I click play button to start game");
             await _gameService.InitializeGameAsync();
         }
 
         [Then("I will play a game until it's finished with victory")]
         public async Task ThenIWillWaitPlayAGameUntilItsFinishedWithVictory()
         {
-            AllureApi.Step("I will play a game until it's finished with victory");
             (GameResult result, FailureReason failureReason) = await AllureApi.Step(
                 "Play full Battleship game",
                 async () => await _gameService.PlayFullGameAsync(
                     overallTimeout: TimeSpan.FromMinutes(GameConfig.OverallGameTimeoutMinutes),
                     opponentConnectTimeout: TimeSpan.FromSeconds(GameConfig.OpponentConnectTimeoutSeconds)));
 
-            await AllureApi.Step("Verify game result", async () =>
+            await AllureApi.Step("Verify game result", () =>
             {
                 // Log the actual result for debugging
                 Console.WriteLine($"Game completed. Result: {result}, FailureReason: {failureReason}");
@@ -87,6 +84,8 @@ namespace BattleShipGame.Battleship.Tests.Tests
 
                     Assert.Fail(failureDetails);
                 }
+
+                return Task.CompletedTask;
             });
         }
     }

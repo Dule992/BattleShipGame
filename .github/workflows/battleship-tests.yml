@@ -35,31 +35,27 @@ jobs:
       - name: Create Job Summary
         if: always()
         run: |
-          echo "# cocktail Test Results" >> $GITHUB_STEP_SUMMARY
-          echo "## BattleShipGame Test Summary" >> $GITHUB_STEP_SUMMARY
-          echo "* **Status**: ${{ steps.test-step.outcome }}" >> $GITHUB_STEP_SUMMARY
-          echo "* **Framework**: .NET ${{ env.DOTNET_VERSION }}" >> $GITHUB_STEP_SUMMARY
-          echo "* **OS**: ${{ runner.os }}" >> $GITHUB_STEP_SUMMARY
-          echo "* **Run Date**: $(date -u '+%Y-%m-%d %H:%M:%S UTC')" >> $GITHUB_STEP_SUMMARY
-          echo "* **Triggered by**: ${{ github.event_name }} from ${{ github.actor }}" >> $GITHUB_STEP_SUMMARY
+         if [ "${{ steps.test-step.outcome }}" = "success" ]; then
+          STATUS_ICON="✅"
+          STATUS_TEXT="Success"
+         else
+          STATUS_ICON="❌"
+          STATUS_TEXT="${{ steps.test-step.outcome }}"
+         fi
+
+         {
+          echo "# 🧪 Test Results" >> $GITHUB_STEP_SUMMARY
+          echo "## 🚢  BattleShipGame Test Summary" >> $GITHUB_STEP_SUMMARY
+          echo ""
+          echo "- ${STATUS_ICON} **Status:** ${STATUS_TEXT}" >> $GITHUB_STEP_SUMMARY
+          echo "- 🧰 * **Framework**: .NET ${{ env.DOTNET_VERSION }}" >> $GITHUB_STEP_SUMMARY
+          echo "- 🖥️ * **OS**: ${{ runner.os }}" >> $GITHUB_STEP_SUMMARY
+          echo "- 🕒 * **Run Date**: $(date -u '+%Y-%m-%d %H:%M:%S UTC')" >> $GITHUB_STEP_SUMMARY
+          echo "- 👤 * **Triggered by**: ${{ github.event_name }} from ${{ github.actor }}" >> $GITHUB_STEP_SUMMARY
+          echo ""
           echo "---" >> $GITHUB_STEP_SUMMARY
           echo "Detailed test results are available in [Allure Report] (https://pages.github.com/${{ github.repository }})" >> $GITHUB_STEP_SUMMARY
-
-      - name: Ensure gh-pages branch exists
-        if: always()
-        run: |
-          git remote set-url origin "https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git"
-          if ! git ls-remote --exit-code --heads origin gh-pages; then
-            echo "gh-pages not found on remote � creating initial gh-pages branch"
-            git fetch origin
-            git checkout --orphan gh-pages
-            git rm -rf .
-            git commit --allow-empty -m "Initial gh-pages commit"
-            git push origin gh-pages
-            git checkout -
-          else
-            echo "gh-pages branch exists on remote"
-          fi
+         }
 
       - name: Get Allure history
         if: always()

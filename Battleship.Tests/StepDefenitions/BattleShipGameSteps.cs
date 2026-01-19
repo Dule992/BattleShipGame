@@ -6,15 +6,15 @@ using Reqnroll;
 using Reqnroll.BoDi;
 using System.Text;
 
-namespace BattleShipGame.Battleship.Tests.Tests
+namespace BattleShipGame.Battleship.Tests.StepDefenitions
 {
     [Binding]
-    public class StepDefinitions
+    public class BattleShipGameSteps
     {
         private readonly IObjectContainer _objectContainer;
         private BattleshipGameService _gameService;
 
-        public StepDefinitions(IObjectContainer objectContainer)
+        public BattleShipGameSteps(IObjectContainer objectContainer)
         {
             _objectContainer = objectContainer;
             _gameService = _objectContainer.Resolve<BattleshipGameService>();

@@ -8,6 +8,9 @@ env:
   SOLUTION_FILE: BattleShipGame.sln
   BUILD_CONFIGURATION: Debug
 
+permissions:
+  contents: write
+
 jobs:
   autotests:
     name: Run tests and generate Allure Report
@@ -48,10 +51,10 @@ jobs:
           echo "## 🚢  BattleShipGame Test Summary" >> $GITHUB_STEP_SUMMARY
           echo ""
           echo "- ${STATUS_ICON} **Status:** ${STATUS_TEXT}" >> $GITHUB_STEP_SUMMARY
-          echo "- 🧰 * **Framework**: .NET ${{ env.DOTNET_VERSION }}" >> $GITHUB_STEP_SUMMARY
-          echo "- 🖥️ * **OS**: ${{ runner.os }}" >> $GITHUB_STEP_SUMMARY
-          echo "- 🕒 * **Run Date**: $(date -u '+%Y-%m-%d %H:%M:%S UTC')" >> $GITHUB_STEP_SUMMARY
-          echo "- 👤 * **Triggered by**: ${{ github.event_name }} from ${{ github.actor }}" >> $GITHUB_STEP_SUMMARY
+          echo "- 🧰 **Framework**: .NET ${{ env.DOTNET_VERSION }}" >> $GITHUB_STEP_SUMMARY
+          echo "- 🖥️ **OS**: ${{ runner.os }}" >> $GITHUB_STEP_SUMMARY
+          echo "- 🕒 **Run Date**: $(date -u '+%Y-%m-%d %H:%M:%S UTC')" >> $GITHUB_STEP_SUMMARY
+          echo "- 👤 **Triggered by**: ${{ github.event_name }} from ${{ github.actor }}" >> $GITHUB_STEP_SUMMARY
           echo ""
           echo "---" >> $GITHUB_STEP_SUMMARY
           echo "Detailed test results are available in [Allure Report] (https://pages.github.com/${{ github.repository }})" >> $GITHUB_STEP_SUMMARY
@@ -81,16 +84,21 @@ jobs:
           fi
 
       - name: Generate Allure Report
-        uses: simple-elf/allure-report-action@v1.13
         if: always()
-        with:
-          allure_results: allure-results
-          allure_history: allure-results/history
+        run: |
+          npm i -g allure-commandline
+          allure generate --single-file allure-results --clean
+
+      - name: Ensure publish folder exists
+        if: always()
+        run: |
+          mkdir -p allure-report    
 
       - name: Deploy report to GitHub Pages
         if: always()
         uses: peaceiris/actions-gh-pages@v4
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
-          publish_dir: allure-history
+          publish_dir: allure-report
           publish_branch: gh-pages
+          force_orphan: true

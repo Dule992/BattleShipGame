@@ -10,7 +10,7 @@ using Reqnroll.BoDi;
 using System.Runtime.CompilerServices;
 using System.Text;
 
-namespace BattleShipGame.Battleship.Tests.Tests
+namespace BattleShipGame.Battleship.Tests.StepDefenitions
 {
     [Binding]
     public class Hooks

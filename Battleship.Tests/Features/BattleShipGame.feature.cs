@@ -11,7 +11,7 @@
 #region Designer generated code
 #pragma warning disable
 using Reqnroll;
-namespace BattleShipGame.Battleship_Tests.Tests
+namespace BattleShipGame.Battleship_Tests.Features
 {
     
     
@@ -29,7 +29,7 @@ namespace BattleShipGame.Battleship_Tests.Tests
         private static string[] featureTags = new string[] {
                 "allure.epic:WebGame"};
         
-        private static global::Reqnroll.FeatureInfo featureInfo = new global::Reqnroll.FeatureInfo(new global::System.Globalization.CultureInfo("en-US"), "Battleship.Tests/Tests", "BattleShipGame", "As a player\r\nI want to play Battle Ship Game\r\nAnd try to win opponent player", global::Reqnroll.ProgrammingLanguage.CSharp, featureTags, InitializeCucumberMessages());
+        private static global::Reqnroll.FeatureInfo featureInfo = new global::Reqnroll.FeatureInfo(new global::System.Globalization.CultureInfo("en-US"), "Battleship.Tests/Features", "BattleShipGame", "As a player\r\nI want to play Battle Ship Game\r\nAnd try to win opponent player", global::Reqnroll.ProgrammingLanguage.CSharp, featureTags, InitializeCucumberMessages());
         
 #line 1 "BattleShipGame.feature"
 #line hidden
@@ -107,7 +107,7 @@ namespace BattleShipGame.Battleship_Tests.Tests
         
         private static global::Reqnroll.Formatters.RuntimeSupport.FeatureLevelCucumberMessages InitializeCucumberMessages()
         {
-            return new global::Reqnroll.Formatters.RuntimeSupport.FeatureLevelCucumberMessages("Battleship.Tests/Tests/BattleShipGame.feature.ndjson", 3);
+            return new global::Reqnroll.Formatters.RuntimeSupport.FeatureLevelCucumberMessages("Battleship.Tests/Features/BattleShipGame.feature.ndjson", 3);
         }
         
         [global::NUnit.Framework.TestAttribute()]

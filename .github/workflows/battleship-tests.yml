@@ -57,7 +57,7 @@ jobs:
           echo "- 👤 **Triggered by**: ${{ github.event_name }} from ${{ github.actor }}" >> $GITHUB_STEP_SUMMARY
           echo ""
           echo "---" >> $GITHUB_STEP_SUMMARY
-          echo "Detailed test results are available in [Allure Report] (https://pages.github.com/${{ github.repository }})" >> $GITHUB_STEP_SUMMARY
+          echo "Detailed test results are available in [Allure Report] (https://dule992.github.io/BattleShipGame/)" >> $GITHUB_STEP_SUMMARY
          }
 
       - name: Get Allure history
@@ -83,17 +83,16 @@ jobs:
             echo "Copied gh-pages history into ./allure-results/history"
           fi
 
+      - name: Ensure publish folder exists
+        if: always()
+        run: |
+          mkdir -p allure-report    
       - name: Generate Allure Report
         if: always()
         run: |
           npm i -g allure-commandline
           allure generate --single-file allure-results --clean
-
-      - name: Ensure publish folder exists
-        if: always()
-        run: |
-          mkdir -p allure-report    
-
+          
       - name: Deploy report to GitHub Pages
         if: always()
         uses: peaceiris/actions-gh-pages@v4

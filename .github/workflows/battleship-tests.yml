@@ -87,11 +87,14 @@ jobs:
         if: always()
         run: |
           mkdir -p allure-report
+
+      - name: Install JRE (if needed)
+        run: sudo apt-get update && sudo apt-get install -y default-jre
           
       - name: Generate Allure Report
         if: always()
         run: |
-          npm i -g allure-commandline
+          npm i -g allure-commandline@latest
           # generate explicit output into ./allure-report; preserve history copied above
           allure generate ./allure-results -o ./allure-report --clean --single-file || true
           # show generated files for debugging

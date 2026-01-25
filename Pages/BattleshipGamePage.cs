@@ -25,7 +25,7 @@ namespace BattleShipGame.Pages
 
         public async Task RandomizeShipsAsync(int randomClicks)
         {
-            var randomizeLink = _page.GetByText("Randomise");
+            var randomizeLink = _page.GetByText("Randomize");
             for (int i = 0; i < randomClicks; i++)
             {
                 await randomizeLink.ClickAsync();

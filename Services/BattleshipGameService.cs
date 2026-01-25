@@ -70,8 +70,8 @@ namespace BattleShipGame.Services
             await _page.ChooseRandomOpponentAsync();
 
             int randomClicks = _rnd.Next(1, 16);
-            Console.WriteLine($"Randomising ships {randomClicks} time(s).");
-            await _page.RandomiseShipsAsync(randomClicks);
+            Console.WriteLine($"Randomizing ships {randomClicks} time(s).");
+            await _page.RandomizeShipsAsync(randomClicks);
 
             Console.WriteLine("Clicking Play.");
             await _page.ClickPlayAsync();

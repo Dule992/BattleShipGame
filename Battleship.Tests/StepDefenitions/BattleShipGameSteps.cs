@@ -69,7 +69,7 @@ namespace BattleShipGame.Battleship.Tests.StepDefenitions
                         "text/plain",
                         Encoding.UTF8.GetBytes("✓ Game ended in VICTORY - Test PASSED"));
 
-                    Assert.Pass("Game ended in victory – test successful.");
+                    Assert.That(result.Equals(GameResult.Victory), "Game did not end in Victory as expected.");
                 }
                 else
                 {

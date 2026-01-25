@@ -86,12 +86,16 @@ jobs:
       - name: Ensure publish folder exists
         if: always()
         run: |
-          mkdir -p allure-report    
+          mkdir -p allure-report
+          
       - name: Generate Allure Report
         if: always()
         run: |
           npm i -g allure-commandline
-          allure generate --single-file allure-results --clean
+          # generate explicit output into ./allure-report; preserve history copied above
+          allure generate ./allure-results -o ./allure-report --clean --single-file || true
+          # show generated files for debugging
+          ls -la ./allure-report || true
           
       - name: Deploy report to GitHub Pages
         if: always()

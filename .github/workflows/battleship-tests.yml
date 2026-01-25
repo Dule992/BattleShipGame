@@ -57,7 +57,7 @@ jobs:
           echo "- 👤 **Triggered by**: ${{ github.event_name }} from ${{ github.actor }}" >> $GITHUB_STEP_SUMMARY
           echo ""
           echo "---" >> $GITHUB_STEP_SUMMARY
-          echo "Detailed test results are available in [Allure Report] (https://dule992.github.io/BattleShipGame/)" >> $GITHUB_STEP_SUMMARY
+          echo "Detailed test results are available in [Allure Report](https://dule992.github.io/BattleShipGame/)" >> $GITHUB_STEP_SUMMARY
          }
 
       - name: Get Allure history
@@ -88,15 +88,18 @@ jobs:
         run: |
           mkdir -p allure-report
 
-      - name: Install JRE (if needed)
-        run: sudo apt-get update && sudo apt-get install -y default-jre
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
           
       - name: Generate Allure Report
         if: always()
         run: |
-          npm i -g allure-commandline@latest
+          npm i -g allure-commandline@2.30.0
           # generate explicit output into ./allure-report; preserve history copied above
-          allure generate ./allure-results -o ./allure-report --clean --single-file || true
+          allure generate ./allure-results --clean -o ./allure-report --single-file
           # show generated files for debugging
           ls -la ./allure-report || true
           

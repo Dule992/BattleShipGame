@@ -5,8 +5,8 @@ namespace BattleShipGame.Pages
     public class BattleshipGamePage
     {
         private readonly IPage _page;
-        private string GAME_RESULT_MESSAGE = ".notification:not(.none) .notification-message";
-        private string RESTART_BUTTON = ".notification:not(.none) .notification-submit.restart";
+        private readonly string GAME_RESULT_MESSAGE = ".notification:not(.none) .notification-message";
+        private readonly string RESTART_BUTTON = ".notification:not(.none) .notification-submit.restart";
 
         public BattleshipGamePage(IPage page)
         {
@@ -23,12 +23,12 @@ namespace BattleShipGame.Pages
             await _page.GetByRole(AriaRole.Link, new() { Name = "random" }).ClickAsync();
         }
 
-        public async Task RandomiseShipsAsync(int randomClicks)
+        public async Task RandomizeShipsAsync(int randomClicks)
         {
-            var randomiseLink = _page.GetByText("Randomise");
+            var randomizeLink = _page.GetByText("Randomize");
             for (int i = 0; i < randomClicks; i++)
             {
-                await randomiseLink.ClickAsync();
+                await randomizeLink.ClickAsync();
             }
         }
 
@@ -90,8 +90,6 @@ namespace BattleShipGame.Pages
 
         public async Task<CellState> ReadLastShotResultAsync(Coordinate coord)
         {
-            var cellLocator = _page.Locator($".battlefield__rival .battlefield-table .battlefield-cell-content[data-y='{coord.Row}'][data-x='{coord.Col}']");
-
             try
             {
                 var hitParentCss = _page.Locator($".battlefield__rival .battlefield-table .battlefield-cell.battlefield-cell__hit .battlefield-cell-content[data-y='{coord.Row}'][data-x='{coord.Col}']");

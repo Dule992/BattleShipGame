@@ -6,7 +6,7 @@ using BrowserType = BattleShipGame.Battleship.Tests.Config.Enums.BrowserType;
 namespace BattleShipGame.Battleship.Tests.Fixtures
 {
     [SetUpFixture]
-    public class PlaywrightFixture
+    public static class PlaywrightFixture
     {
         private static IBrowser _browser;
         private static IBrowserContext _browserContext;
@@ -21,7 +21,7 @@ namespace BattleShipGame.Battleship.Tests.Fixtures
             _browser = await CreateBrowserInstance(playwright, browserType).ConfigureAwait(false);
             _browserContext = await CreateBrowserContext(playwright, _browser).ConfigureAwait(false);
 
-            Console.WriteLine($"Initialising Playwright. Headless={PlaywrightConfig.Headless}, SlowMo={PlaywrightConfig.SlowMoMilliseconds}ms");
+            Console.WriteLine($"Initializing Playwright. Headless={PlaywrightConfig.Headless}, SlowMo={PlaywrightConfig.SlowMoMilliseconds}ms");
 
             CreateBrowserInstance(playwright, BrowserType.CHROME).GetAwaiter().GetResult();
         }

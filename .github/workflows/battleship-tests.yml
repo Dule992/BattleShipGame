@@ -2,91 +2,132 @@ name: Battleship E2E Tests
 
 on:
   workflow_dispatch:
-  
+
 env:
-  DOTNET_VERSION: '8.0.x'
+  DOTNET_VERSION: "9.0.x"
+  SOLUTION_FILE: BattleShipGame.sln
+  BUILD_CONFIGURATION: Debug
+
+permissions:
+  contents: write
 
 jobs:
-  build:
-    name: Battleship E2E Test
-    runs-on: ubuntu-latest
+  autotests:
+    name: Run tests and generate Allure Report
+    runs-on: windows-latest
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-      - name: Setup .NET
+      - name: Set up .NET
         uses: actions/setup-dotnet@v4
         with:
           dotnet-version: ${{ env.DOTNET_VERSION }}
 
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: '20'
-      
-      - name: Install Allure CLI
-        run: npm install -g allure-commandline
-        
-      - name: Restore dependencies
-        run: dotnet restore BattleShipGame.csproj
+      - name: Restore NuGet packages
+        run: dotnet restore --packages .packages -p:ContinuousIntegrationBuild=true ${{ env.SOLUTION_FILE }}
 
-      - name: Install Playwright
-        run: npx playwright install --with-deps
-        working-directory: ./src/Battleship.Tests
+      - name: Build solution
+        run: dotnet build --no-restore --configuration ${{ env.BUILD_CONFIGURATION }} ${{ env.SOLUTION_FILE }}
 
-      - name: Build
-        run: dotnet build --configuration Release --no-restore
-
-      - name: Run tests
-        env:
-          ALLURE_CONFIG: allureConfig.json
-        run: dotnet test BattleShipGame.csproj --configuration Release --no-build --logger "trx;LogFileName=test-results.trx"
-
-      - name: Upload test results
+      - name: Mark test start time
+        id: test-start
         if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: test-results
-          path: |
-            ./TestResults
-            ./bin/Debug/net8.0/allure-results
-            ./allure-results
+        shell: pwsh
+        run: |
+          "utc=$(Get-Date -AsUTC -Format 'o')" >> $env:GITHUB_OUTPUT
+      - id: test-step
+        name: Test solution
+        run: dotnet test --no-build --configuration ${{ env.BUILD_CONFIGURATION }} ${{ env.SOLUTION_FILE }}
+        continue-on-error: true
+
+      - name: Mark test end time
+        id: test-end
+        if: always()
+        shell: pwsh
+        run: |
+          "utc=$(Get-Date -AsUTC -Format 'o')" >> $env:GITHUB_OUTPUT
 
       - name: Create Job Summary
         if: always()
+        shell: pwsh
         run: |
-          echo "# cocktail Test Results" >> $GITHUB_STEP_SUMMARY
-          echo "## BattleShipGame Test Summary" >> $GITHUB_STEP_SUMMARY
-          echo "* **Status**: ${{ steps.test-step.outcome }}" >> $GITHUB_STEP_SUMMARY
-          echo "* **Framework**: .NET ${{ env.DOTNET_VERSION }}" >> $GITHUB_STEP_SUMMARY
-          echo "* **OS**: ${{ runner.os }}" >> $GITHUB_STEP_SUMMARY
-          echo "* **Run Date**: $(date -u '+%Y-%m-%d %H:%M:%S UTC')" >> $GITHUB_STEP_SUMMARY
-          echo "* **Triggered by**: ${{ github.event_name }} from ${{ github.actor }}" >> $GITHUB_STEP_SUMMARY
-          echo "---" >> $GITHUB_STEP_SUMMARY"
-          echo "Detailed test results are available in [Allure Report] (https://pages.github.com/${{ github.repository }})" >> $GITHUB_STEP_SUMMARY)
+          if ("${{ steps.test-step.outcome }}" -eq "success") {
+            $STATUS_ICON = "✅"
+            $STATUS_TEXT = "Success"
+          } else {
+            $STATUS_ICON = "❌"
+            $STATUS_TEXT = "${{ steps.test-step.outcome }}"
+          }
 
-      - name: Load test report history
-        uses: actions/checkout@v4
+          $start = [DateTimeOffset]::Parse("${{ steps.test-start.outputs.utc }}")
+          $end   = [DateTimeOffset]::Parse("${{ steps.test-end.outputs.utc }}")
+          $dur   = $end - $start
+
+          $durationText = "{0:hh\:mm\:ss}" -f $dur
+
+          $summary = @"
+          # 🧪 Test Results
+          ## 🚢 BattleShipGame Test Summary
+
+          - $STATUS_ICON **Status:** $STATUS_TEXT
+          - 🧰 **Framework**: .NET ${{ env.DOTNET_VERSION }}
+          - 🖥️ **OS**: ${{ runner.os }}
+          - 🕒 **Run Date**: $(Get-Date -AsUTC -Format 'yyyy-MM-dd HH:mm:ss UTC')
+          - ⏱️ **Duration:** $durationText
+          - 👤 **Triggered by**: ${{ github.event_name }} from ${{ github.actor }}
+
+          ---
+          Detailed test results are available in [Allure Report](https://dule992.github.io/BattleShipGame/)
+          "@
+          
+              Add-Content -Path $env:GITHUB_STEP_SUMMARY -Value $summary
+      - name: Get Allure history
         if: always()
         continue-on-error: true
+        uses: actions/checkout@v5
         with:
           ref: gh-pages
           path: gh-pages
 
-      # Optional: generate static Allure HTML report
-      - name: Generate Allure report
-        uses: simple-elf/allure-report-action@v1.11
+      - name: Prepare Allure results & history
         if: always()
-        with:
-          gh_pages: gh-pages 
-          allure_history: allure-history
-          allure_results: ./allure-results
+        shell: pwsh
+        run: |
+          if (-not (Test-Path "./allure-results")) {
+            New-Item -ItemType Directory -Path "./allure-results" -Force | Out-Null
+            Write-Output "Created empty ./allure-results to avoid action failure"
+          }
 
-      - name: Upload Allure test report
-        uses: peaceiris/actions-gh-pages@v4
+          if (Test-Path "./gh-pages/history") {
+            New-Item -ItemType Directory -Path "./allure-results/history" -Force | Out-Null
+            Copy-Item -Path "./gh-pages/history/*" -Destination "./allure-results/history/" -Recurse -Force -ErrorAction SilentlyContinue
+            Write-Output "Copied gh-pages history into ./allure-results/history"
+          }
+
+      - name: Ensure publish folder exists
         if: always()
+        shell: pwsh
+        run: New-Item -ItemType Directory -Path "allure-report" -Force | Out-Null
+
+      - name: Set up Java
+        uses: actions/setup-java@v4
         with:
-          github_token : ${{ secrets.GITHUB_TOKEN }}
+          distribution: temurin
+          java-version: '17'
+
+      - name: Generate Allure Report
+        if: always()
+        shell: pwsh
+        run: |
+          npm i -g allure-commandline@2.30.0
+          allure generate ./allure-results --clean -o ./allure-report
+          Get-ChildItem -Path ./allure-report -Force -ErrorAction SilentlyContinue | ForEach-Object { Write-Output $_.FullName }
+
+      - name: Deploy report to GitHub Pages
+        if: always()
+        uses: peaceiris/actions-gh-pages@v4.0.0
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: allure-report
           publish_branch: gh-pages
-          publish_dir: allure-history
-
+          force_orphan: true

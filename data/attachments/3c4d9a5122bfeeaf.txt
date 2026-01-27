@@ -1,0 +1,2 @@
+Game Result: Unknown
+Failure Reason: Unknown
